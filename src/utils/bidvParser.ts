@@ -26,18 +26,20 @@ export function formatVND(amount: number): string {
 }
 
 /**
- * Format a readable date in Vietnamese
+ * Format a readable date in Vietnamese (always pinned to Vietnam Time UTC+7)
  */
 export function formatDateTime(isoString: string): string {
   try {
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return isoString;
     return new Intl.DateTimeFormat('vi-VN', {
+      timeZone: 'Asia/Ho_Chi_Minh',
       hour: '2-digit',
       minute: '2-digit',
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
+      hour12: false,
     }).format(d);
   } catch {
     return isoString;
@@ -158,35 +160,56 @@ export function parseBidvNotificationLocally(
     balance = cleanNumber(balanceMatch[1]);
   }
 
-  // 4. Extract Timestamp
-  // "vao 14:25 15/09/2026" or "Thời gian giao dịch: 10:14 17/09/2026"
+  // 4. Extract Timestamp in Vietnam Local Time (ICT, UTC+7)
+  // e.g. "Thời gian giao dịch: 15:36 17/09/2026", "vao 14:25 15/09/2026", "17/09/2026 15:36:00"
   let timestamp = new Date().toISOString();
+
+  const parseVietnamDateTime = (timeRaw: string, dateRaw: string): string | null => {
+    try {
+      const cleanDate = dateRaw.replace(/-/g, '/').trim();
+      const [dayStr, monthStr, yearStr] = cleanDate.split('/');
+      if (!dayStr || !monthStr || !yearStr) return null;
+      const day = dayStr.padStart(2, '0');
+      const month = monthStr.padStart(2, '0');
+      const fullYear = yearStr.length === 2 ? `20${yearStr}` : yearStr;
+
+      const timeParts = timeRaw.trim().split(':');
+      if (timeParts.length < 2) return null;
+      const hour = timeParts[0].padStart(2, '0');
+      const minute = timeParts[1].padStart(2, '0');
+      const second = timeParts[2] ? timeParts[2].padStart(2, '0') : '00';
+      const formattedTime = `${hour}:${minute}:${second}`;
+
+      // Construct Vietnam offset date (+07:00) so UTC conversion is 100% exact
+      const isoCandidate = `${fullYear}-${month}-${day}T${formattedTime}+07:00`;
+      const parsed = new Date(isoCandidate);
+      if (!isNaN(parsed.getTime())) {
+        return parsed.toISOString();
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  };
+
+  // Format 1: Time then Date (e.g. "15:36 17/09/2026" or "Thời gian giao dịch: 15:36 17/09/2026")
   const timeDateMatch = text.match(
-    /(?:vao|vào|luc|lúc|Thời gian giao dịch:|Thoi gian giao dich:)?\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:ngay|ngày)?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/i
+    /(?:Thời gian giao dịch|Thoi gian giao dich|Thời gian GD|Thoi gian GD|Thời gian|Thoi gian|TG GD|TG|vao|vào|luc|lúc)?[:\s]*(\d{1,2}:\d{2}(?::\d{2})?)\s*(?:ngay|ngày)?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/i
   );
+  // Format 2: Date then Time (e.g. "17/09/2026 15:36" or "17/09/2026 lúc 15:36")
   const dateTimeMatch = text.match(
-    /(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s*(\d{1,2}:\d{2}(?::\d{2})?)/i
+    /(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s*(?:vao|vào|luc|lúc)?\s*(\d{1,2}:\d{2}(?::\d{2})?)/i
   );
 
   if (timeDateMatch) {
-    const timeStr = timeDateMatch[1];
-    const dateStr = timeDateMatch[2].replace(/-/g, '/');
-    const [day, month, yearPart] = dateStr.split('/');
-    const fullYear = yearPart.length === 2 ? `20${yearPart}` : yearPart;
-    const isoCandidate = `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timeStr}:00.000Z`;
-    const parsed = new Date(isoCandidate);
-    if (!isNaN(parsed.getTime())) {
-      timestamp = isoCandidate;
+    const candidate = parseVietnamDateTime(timeDateMatch[1], timeDateMatch[2]);
+    if (candidate) {
+      timestamp = candidate;
     }
   } else if (dateTimeMatch) {
-    const dateStr = dateTimeMatch[1].replace(/-/g, '/');
-    const timeStr = dateTimeMatch[2];
-    const [day, month, yearPart] = dateStr.split('/');
-    const fullYear = yearPart.length === 2 ? `20${yearPart}` : yearPart;
-    const isoCandidate = `${fullYear}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timeStr}:00.000Z`;
-    const parsed = new Date(isoCandidate);
-    if (!isNaN(parsed.getTime())) {
-      timestamp = isoCandidate;
+    const candidate = parseVietnamDateTime(dateTimeMatch[2], dateTimeMatch[1]);
+    if (candidate) {
+      timestamp = candidate;
     }
   }
 
@@ -206,7 +229,20 @@ export function parseBidvNotificationLocally(
     /(?:Nội dung giao dịch|Noi dung giao dich|Nội dung GD|Noi dung GD|\bND GD|\bND|Nội dung|Noi dung|Lý do|Ly do)[:\s]+([^\n\r]+)/i
   );
   if (descMatch) {
-    description = descMatch[1].trim();
+    let rawDesc = descMatch[1].trim();
+    // Cut off at newline if present
+    const newlineIdx = rawDesc.search(/[\r\n]/);
+    if (newlineIdx >= 0) {
+      rawDesc = rawDesc.substring(0, newlineIdx).trim();
+    }
+    // If notification was concatenated or repeated on one line, cut off before the next header
+    const stopIndex = rawDesc.search(
+      /\b(?:Mã giao dịch|Ma giao dich|Mã GD|Ma GD|Ref|Số GD|So GD|Số dư cuối|So du cuoi|Số dư|So du|Thông báo BIDV|Thong bao BIDV|Thời gian giao dịch|Thoi gian giao dich|Tài khoản thanh toán|Tai khoan thanh toan|Số tiền giao dịch|So tien giao dich|Số tiền GD|So tien GD|Tài khoản|Tai khoan|Số tiền|So tien)\b/i
+    );
+    if (stopIndex > 0) {
+      rawDesc = rawDesc.substring(0, stopIndex).trim();
+    }
+    description = rawDesc;
   } else {
     // If not explicitly formatted with ND:, use the tail portion
     const parts = text.split(/[.;\n]/).map((p) => p.trim()).filter((p) => p.length > 0);
@@ -223,6 +259,8 @@ export function parseBidvNotificationLocally(
       .replace(/(?:Số dư cuối|So du cuoi|Số dư khả dụng|So du kha dung|Số dư|So du|SD)[:\s]+[0-9.,]+\s*(?:VND|đ|d)?/gi, '')
       .replace(/(?:Mã giao dịch|Ma giao dich|Ref|Số GD|So GD|Mã GD|Ma GD)[:\s]+[A-Za-z0-9\-_]+/gi, '')
       .replace(/(?:Nội dung giao dịch|Noi dung giao dich|Nội dung GD|Noi dung GD|\bND GD|\bND|Nội dung|Noi dung)[:\s]*/gi, '')
+      .replace(/(?:Thông báo BIDV|Thong bao BIDV)[:\s]*/gi, '')
+      .replace(/\s+/g, ' ')
       .trim();
   }
 

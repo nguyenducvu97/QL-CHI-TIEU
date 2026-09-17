@@ -19,6 +19,9 @@ import {
   TrendingUp,
   SlidersHorizontal,
   Edit3,
+  Clock,
+  FileText,
+  Hash,
 } from 'lucide-react';
 import { CategoryId, Transaction } from '../types';
 import { DEFAULT_CATEGORIES, getCategoryById } from '../data/categories';
@@ -556,44 +559,73 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                     </div>
                   </div>
 
-                  {/* Right: Amount & Balance (Always clearly visible in top corner) */}
+                  {/* Right: Amount (Always prominent in top corner) */}
                   <div className="text-right shrink-0">
                     <span
-                      className={`font-bold text-base sm:text-lg font-mono block tracking-tight ${
+                      className={`font-extrabold text-base sm:text-lg font-mono block tracking-tight ${
                         isCredit ? 'text-emerald-600' : 'text-red-600'
                       }`}
                     >
                       {isCredit ? '+' : '-'}
                       {formatVND(tx.amount)}
                     </span>
-                    {tx.balance !== undefined && (
-                      <span className="text-[10px] text-slate-400 font-mono block">
-                        Dư: {formatVND(tx.balance)}
-                      </span>
-                    )}
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                      {isCredit ? 'Tiền vào' : 'Số tiền GD'}
+                    </span>
                   </div>
                 </div>
 
-                {/* Middle Row: Full Transfer Description & Transaction Meta */}
-                <div className="pl-12.5 text-xs text-slate-500 -mt-1 space-y-0.5">
-                  <p className="line-clamp-2 sm:truncate text-slate-600 text-xs leading-snug">
-                    {tx.description}
-                  </p>
-                  <div className="flex items-center gap-2 flex-wrap text-[11px] text-slate-400">
-                    <span>{formatDateTime(tx.timestamp)}</span>
-                    <span>•</span>
-                    <span>TK BIDV: {tx.accountNumber}</span>
+                {/* Middle Box: Prominently displaying Nội dung, Thời gian, Số tiền thừa/Số dư cuối, Mã GD */}
+                <div className="sm:ml-12.5 rounded-xl bg-slate-50/80 border border-slate-200/70 p-2.5 sm:p-3 space-y-2">
+                  {/* 1. Nội dung giao dịch */}
+                  <div className="flex items-start gap-2">
+                    <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                        Nội dung giao dịch
+                      </span>
+                      <p className="text-xs sm:text-sm font-semibold text-slate-800 break-words">
+                        {tx.description}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 2. Key Data Badges: Thời gian, Số dư cuối (Số tiền thừa), Mã GD, TK */}
+                  <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-slate-200/50 text-[11px]">
+                    {/* Thời gian giao dịch */}
+                    <span className="inline-flex items-center gap-1 font-medium text-slate-700 bg-white px-2 py-0.5 rounded-md border border-slate-200 shadow-2xs">
+                      <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                      <span>{formatDateTime(tx.timestamp)}</span>
+                    </span>
+
+                    {/* Số dư cuối / Số tiền thừa */}
+                    {tx.balance !== undefined && (
+                      <span className="inline-flex items-center gap-1 font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200/80 shadow-2xs">
+                        <Wallet className="w-3 h-3 text-teal-600 shrink-0" />
+                        <span>Số dư cuối (tiền thừa): <strong className="font-mono text-teal-950">{formatVND(tx.balance)}</strong></span>
+                      </span>
+                    )}
+
+                    {/* Tài khoản BIDV */}
+                    <span className="inline-flex items-center gap-1 text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200 shadow-2xs">
+                      <span>TK:</span>
+                      <strong className="font-mono text-slate-700">{tx.accountNumber}</strong>
+                    </span>
+
+                    {/* Mã giao dịch */}
+                    {tx.refNumber && (
+                      <span className="inline-flex items-center gap-1 text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200 shadow-2xs">
+                        <Hash className="w-3 h-3 text-slate-400 shrink-0" />
+                        <span>Mã GD:</span>
+                        <strong className="font-mono text-slate-700">{tx.refNumber}</strong>
+                      </span>
+                    )}
+
+                    {/* Phân loại tự động */}
                     {tx.categoryReason && (
-                      <>
-                        <span>•</span>
-                        <span
-                          className={`font-medium truncate max-w-[170px] sm:max-w-xs ${
-                            isCredit ? 'text-teal-700' : 'text-emerald-700'
-                          }`}
-                        >
-                          {tx.categoryReason}
-                        </span>
-                      </>
+                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700 font-medium">
+                        • {tx.categoryReason}
+                      </span>
                     )}
                   </div>
                 </div>

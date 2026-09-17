@@ -158,17 +158,18 @@ export const ExpenseOverview: React.FC<ExpenseOverviewProps> = ({
         </div>
 
         {/* Total Budget Target */}
-        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs">
+        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs hover:border-emerald-200 transition-colors">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Ngân sách tháng
             </span>
             <button
               onClick={onOpenBudgetModal}
-              className="text-xs text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
-              title="Cài đặt hạn mức"
+              className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-lg font-medium transition-colors cursor-pointer"
+              title="Bấm để cấu hình và cài đặt hạn mức chi tiêu"
             >
-              <Target className="w-4 h-4" />
+              <Target className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Cài đặt</span>
             </button>
           </div>
           <div className="mt-2 flex items-baseline justify-between">
@@ -190,6 +191,21 @@ export const ExpenseOverview: React.FC<ExpenseOverviewProps> = ({
               }`}
               style={{ width: `${Math.min(100, budgetPercent)}%` }}
             />
+          </div>
+          <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-500">
+            <span>
+              {totalBudget >= totalSpent ? (
+                <>Còn lại: <strong className="text-emerald-700 font-mono font-semibold">{formatVND(totalBudget - totalSpent)}</strong></>
+              ) : (
+                <>Đã vượt: <strong className="text-red-600 font-mono font-semibold">{formatVND(totalSpent - totalBudget)}</strong></>
+              )}
+            </span>
+            <button
+              onClick={onOpenBudgetModal}
+              className="text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer"
+            >
+              Điều chỉnh ✎
+            </button>
           </div>
         </div>
 

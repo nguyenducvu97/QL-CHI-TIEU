@@ -1,9 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Zap,
-  Smartphone,
-  SlidersHorizontal,
-  Download,
   PlusCircle,
   TrendingDown,
   ArrowRight,
@@ -11,13 +7,21 @@ import {
   BellRing,
   RotateCcw,
   Sparkles,
-  Copy,
+  X,
 } from 'lucide-react';
 import { CategoryBudget, CategoryId, SmartRule, Transaction } from './types';
 import { DEFAULT_CATEGORIES } from './data/categories';
-import { INITIAL_TRANSACTIONS, SAMPLE_BIDV_MESSAGES } from './data/mockBidvData';
+import { INITIAL_TRANSACTIONS } from './data/mockBidvData';
 import { parseBidvNotificationLocally, formatVND } from './utils/bidvParser';
 import { playTransactionChime } from './utils/sound';
+import {
+  showTransactionNotification,
+  requestNotificationPermission,
+  getNotificationPermission,
+  isNotificationSupported,
+  sendTestNotification,
+} from './utils/notifications';
+import { UnifiedSettingsModal, SettingsTabId } from './components/UnifiedSettingsModal';
 import { Navbar } from './components/Navbar';
 import { NotificationSimulator } from './components/NotificationSimulator';
 import { WebhookIntegrationModal } from './components/WebhookIntegrationModal';
@@ -79,6 +83,8 @@ export default function App() {
   });
 
   // Modal open states
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsActiveTab, setSettingsActiveTab] = useState<SettingsTabId>('budget');
   const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
   const [simulatorInitialText, setSimulatorInitialText] = useState<string | undefined>(undefined);
   const [isWebhookOpen, setIsWebhookOpen] = useState(false);
@@ -89,6 +95,11 @@ export default function App() {
   const [isMonthlyReportOpen, setIsMonthlyReportOpen] = useState(false);
   const [isPWAInstallOpen, setIsPWAInstallOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
+
+  const handleOpenSettings = useCallback((tab: SettingsTabId = 'budget') => {
+    setSettingsActiveTab(tab);
+    setIsSettingsOpen(true);
+  }, []);
 
   // Manual balance override
   const [manualBalance, setManualBalance] = useState<number | null>(() => {
@@ -107,6 +118,90 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   }, []);
+
+  // Browser Notification API permission state
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | 'unsupported'>(() =>
+    getNotificationPermission()
+  );
+
+  const [showNotifBanner, setShowNotifBanner] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const perm = getNotificationPermission();
+    try {
+      const dismissed = localStorage.getItem('bidv_notif_banner_dismissed');
+      return perm === 'default' && !dismissed;
+    } catch {
+      return perm === 'default';
+    }
+  });
+
+  const handleEnableNotificationsFromBanner = async () => {
+    const granted = await requestNotificationPermission();
+    const current = getNotificationPermission();
+    setNotifPermission(current);
+    if (granted) {
+      setShowNotifBanner(false);
+      showToast('✓ Đã bật thông báo đẩy trình duyệt thành công!');
+      sendTestNotification();
+    } else if (current === 'denied') {
+      setShowNotifBanner(false);
+      showToast('Thông báo đang bị chặn trong cài đặt trình duyệt.');
+    }
+  };
+
+  const handleDismissNotifBanner = () => {
+    setShowNotifBanner(false);
+    try {
+      localStorage.setItem('bidv_notif_banner_dismissed', 'true');
+    } catch {}
+  };
+
+  // Auto-clean any bogus 13đ transactions from older parser, re-parse real BIDV amounts, and deduplicate
+  useEffect(() => {
+    setTransactions((prev) => {
+      let modified = false;
+      const seen = new Set<string>();
+      const result: Transaction[] = [];
+
+      for (const t of prev) {
+        let fixedTx = { ...t };
+        // If it has raw BIDV notification, re-parse to ensure accurate amount, clean description, and accurate Vietnam time
+        if (t.rawMessage) {
+          const reParsed = parseBidvNotificationLocally(t.rawMessage, rules);
+          if (reParsed.amount > 0) {
+            if (reParsed.timestamp && fixedTx.timestamp !== reParsed.timestamp) {
+              fixedTx.timestamp = reParsed.timestamp;
+              modified = true;
+            }
+            if (t.amount <= 100 || t.description?.includes('Thông báo BIDV') || t.rawMessage.includes('-65,000')) {
+              fixedTx.amount = reParsed.amount;
+              fixedTx.description = reParsed.description;
+              fixedTx.categoryId = reParsed.suggestedCategoryId;
+              fixedTx.balance = reParsed.balance ?? fixedTx.balance;
+              fixedTx.accountNumber = reParsed.accountNumber || fixedTx.accountNumber;
+              modified = true;
+            }
+          }
+        }
+
+        // Drop bogus 13đ or <= 100đ transactions
+        if (fixedTx.amount <= 100) {
+          modified = true;
+          continue;
+        }
+
+        const dedupeKey = `${fixedTx.amount}-${fixedTx.type}-${fixedTx.timestamp?.slice(0, 16)}-${fixedTx.description}`;
+        if (!seen.has(dedupeKey)) {
+          seen.add(dedupeKey);
+          result.push(fixedTx);
+        } else {
+          modified = true;
+        }
+      }
+
+      return modified ? result : prev;
+    });
+  }, [rules]);
 
   // Save to localStorage
   useEffect(() => {
@@ -165,7 +260,7 @@ export default function App() {
   }, [transactions]);
 
   // Add new transaction handler
-  const handleAddTransaction = useCallback((newTx: Transaction) => {
+  const handleAddTransaction = useCallback((newTx: Transaction, shouldNotify = true) => {
     if (newTx.balance !== undefined) {
       setManualBalance(newTx.balance);
     }
@@ -185,6 +280,21 @@ export default function App() {
 
     const sign = newTx.type === 'credit' ? '+' : '-';
     showToast(`Đã tự động thêm: ${sign}${formatVND(newTx.amount)} (${newTx.description})`);
+
+    // Browser Notification API (displays system push notification even when on another tab / background)
+    if (shouldNotify) {
+      const cat = DEFAULT_CATEGORIES.find((c) => c.id === newTx.categoryId);
+      showTransactionNotification({
+        id: newTx.id,
+        type: newTx.type === 'credit' ? 'income' : 'expense',
+        amount: newTx.amount,
+        description: newTx.description,
+        categoryName: cat?.name,
+        balance: newTx.balance,
+      }).catch((err) => {
+        console.warn('[Notification API] Failed to push notification:', err);
+      });
+    }
   }, [showToast]);
 
   // Save balance handler
@@ -276,6 +386,17 @@ export default function App() {
   // Save updated budgets handler
   const handleSaveBudgets = useCallback((newBudgets: CategoryBudget[]) => {
     setBudgets(newBudgets);
+    try {
+      localStorage.setItem(STORAGE_KEY_BUDGETS, JSON.stringify(newBudgets));
+    } catch (e) {
+      console.error('Error saving budgets to localStorage:', e);
+    }
+    fetch('/api/budgets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ budgets: newBudgets }),
+    }).catch((err) => console.warn('Could not save budgets to server:', err));
+
     showToast('Đã lưu hạn mức ngân sách tháng');
   }, [showToast]);
 
@@ -324,7 +445,6 @@ export default function App() {
   // State for server webhook connection
   const [serverWebhookCount, setServerWebhookCount] = useState<number>(0);
   const [isLiveStreamConnected, setIsLiveStreamConnected] = useState<boolean>(false);
-  const [quickPasteText, setQuickPasteText] = useState<string>('');
   const processedEventIdsRef = React.useRef<Set<string>>(new Set());
 
   // Initialize processed IDs from existing transactions
@@ -395,35 +515,208 @@ export default function App() {
     [rules, handleAddTransaction, showToast]
   );
 
-  // Initial fetch of transactions persisted on server
-  useEffect(() => {
-    const fetchPersistedTransactions = async () => {
-      try {
-        const res = await fetch('/api/transactions');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data.transactions) && data.transactions.length > 0) {
-            setTransactions((prev) => {
-              const prevIds = new Set(prev.map((t) => t.id));
-              const prevRefs = new Set(prev.filter((t) => t.refNumber).map((t) => t.refNumber));
-              const toAdd: Transaction[] = [];
-              for (const sTx of data.transactions) {
-                if (!prevIds.has(sTx.id) && (!sTx.refNumber || !prevRefs.has(sTx.refNumber))) {
-                  toAdd.push(sTx);
-                }
-              }
-              return toAdd.length > 0 ? [...toAdd, ...prev] : prev;
+  // Stable ref to avoid duplicate clipboard reading
+  const lastCheckedClipboardRef = useRef<string>('');
+
+  // Auto-check Clipboard when user opens or returns to app
+  const checkClipboardSilently = useCallback(async () => {
+    try {
+      if (typeof navigator === 'undefined' || !navigator.clipboard?.readText) return;
+
+      const clipText = await navigator.clipboard.readText();
+      if (!clipText || !clipText.trim()) return;
+
+      const trimmed = clipText.trim();
+      if (trimmed === lastCheckedClipboardRef.current) return;
+
+      // Check if text looks like a banking notification or message
+      const isBankLike = /\b(?:bidv|smartbanking|giao dịch|giao dich|số dư|so du|số tiền|so tien|tk\s*\d+|vnd)\b/i.test(trimmed);
+      if (!isBankLike) return;
+
+      lastCheckedClipboardRef.current = trimmed;
+      const parsed = parseBidvNotificationLocally(trimmed, rules);
+      if (parsed.amount > 0) {
+        setTransactions((prev) => {
+          const alreadyExists = prev.some(
+            (t) =>
+              (parsed.refNumber && t.refNumber === parsed.refNumber) ||
+              (t.amount === parsed.amount && t.rawMessage === trimmed)
+          );
+          if (alreadyExists) return prev;
+
+          const newTx: Transaction = {
+            id: 'tx-clip-auto-' + Date.now(),
+            accountNumber: parsed.accountNumber,
+            amount: parsed.amount,
+            type: parsed.isBidvDebit ? 'debit' : 'credit',
+            balance: parsed.balance,
+            timestamp: parsed.timestamp,
+            rawMessage: trimmed,
+            description: parsed.description,
+            merchant: parsed.merchant,
+            categoryId: parsed.suggestedCategoryId,
+            categoryReason: 'Tự động phát hiện thông báo khi mở app: ' + parsed.reasoning,
+            confidence: parsed.confidence,
+            source: 'sms_paste',
+            refNumber: parsed.refNumber,
+            isAutoRecorded: true,
+            reviewed: false,
+          };
+
+          if (parsed.balance !== undefined && parsed.balance > 0) {
+            setManualBalance(parsed.balance);
+          }
+
+          playTransactionChime();
+          showToast(`📋 Tự động ghi nhận thông báo BIDV từ điện thoại: ${parsed.isBidvDebit ? '-' : '+'}${formatVND(parsed.amount)} (${parsed.description})`);
+
+          // Push browser notification
+          const cat = DEFAULT_CATEGORIES.find((c) => c.id === newTx.categoryId);
+          showTransactionNotification({
+            id: newTx.id,
+            type: newTx.type === 'credit' ? 'income' : 'expense',
+            amount: newTx.amount,
+            description: newTx.description,
+            categoryName: cat?.name,
+            balance: newTx.balance,
+          }).catch(() => {});
+
+          // Sync to server
+          fetch('/api/transactions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newTx),
+          }).catch(() => {});
+
+          return [newTx, ...prev];
+        });
+      }
+    } catch {
+      // Browser permissions or user not focused, silently ignore
+    }
+  }, [rules, showToast]);
+
+  // Centralized sync function to pull all new transactions and events from server
+  const syncServerData = useCallback(async (notifyIfNew = false) => {
+    try {
+      const [txRes, evtRes, budgetRes] = await Promise.all([
+        fetch('/api/transactions'),
+        fetch('/api/webhook/events'),
+        fetch('/api/budgets').catch(() => null),
+      ]);
+
+      if (budgetRes && budgetRes.ok) {
+        try {
+          const bData = await budgetRes.json();
+          if (Array.isArray(bData.budgets) && bData.budgets.length > 0) {
+            setBudgets((prev) => {
+              const prevStr = JSON.stringify(prev);
+              const nextStr = JSON.stringify(bData.budgets);
+              if (prevStr === nextStr) return prev;
+              return bData.budgets;
             });
           }
+        } catch {}
+      }
+
+      if (txRes.ok) {
+        const txData = await txRes.json();
+        if (Array.isArray(txData.transactions) && txData.transactions.length > 0) {
+          setTransactions((prev) => {
+            const prevIds = new Set(prev.map((t) => t.id));
+            const prevRefs = new Set(prev.filter((t) => t.refNumber).map((t) => t.refNumber));
+            const toAdd: Transaction[] = [];
+
+            for (const sTx of txData.transactions) {
+              if (!prevIds.has(sTx.id) && (!sTx.refNumber || !prevRefs.has(sTx.refNumber))) {
+                toAdd.push(sTx);
+              }
+            }
+
+            if (toAdd.length > 0) {
+              const newestWithBal = toAdd.find((t) => t.balance !== undefined);
+              if (newestWithBal && newestWithBal.balance !== undefined) {
+                setManualBalance(newestWithBal.balance);
+              }
+              if (notifyIfNew) {
+                playTransactionChime();
+                showToast(`⚡ Đã tự động cập nhật ${toAdd.length} giao dịch BIDV mới vào sổ chi tiêu!`);
+                toAdd.slice(0, 3).forEach((tx) => {
+                  const cat = DEFAULT_CATEGORIES.find((c) => c.id === tx.categoryId);
+                  showTransactionNotification({
+                    id: tx.id,
+                    type: tx.type === 'credit' ? 'income' : 'expense',
+                    amount: tx.amount,
+                    description: tx.description,
+                    categoryName: cat?.name,
+                    balance: tx.balance,
+                  }).catch(() => {});
+                });
+              }
+              return [...toAdd, ...prev];
+            }
+            return prev;
+          });
         }
-      } catch (err) {
-        console.warn('[Sync] Could not fetch server transactions:', err);
+      }
+
+      if (evtRes.ok) {
+        const evtData = await evtRes.json();
+        if (typeof evtData.count === 'number') {
+          setServerWebhookCount(evtData.count);
+        }
+        if (evtData.events && Array.isArray(evtData.events) && evtData.events.length > 0) {
+          const eventsList = [...evtData.events].reverse();
+          for (const evt of eventsList) {
+            processIncomingEventItem(evt, false);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Sync] Sync failed:', err);
+    }
+  }, [processIncomingEventItem, showToast]);
+
+  // 1. Initial fetch & background polling every 3.5s
+  useEffect(() => {
+    syncServerData(false);
+
+    const interval = setInterval(() => {
+      syncServerData(false);
+    }, 3500);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [syncServerData]);
+
+  // 2. Immediate auto-sync and auto-clipboard check whenever user opens or switches back to app
+  useEffect(() => {
+    const handleAppActive = () => {
+      if (document.visibilityState === 'visible') {
+        syncServerData(true);
+        checkClipboardSilently();
       }
     };
-    fetchPersistedTransactions();
-  }, []);
 
-  // 1. Real-time instant push via Server-Sent Events (SSE)
+    const handleFocus = () => {
+      syncServerData(true);
+      checkClipboardSilently();
+    };
+
+    document.addEventListener('visibilitychange', handleAppActive);
+    window.addEventListener('focus', handleFocus);
+
+    // Initial check on load
+    checkClipboardSilently();
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleAppActive);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [syncServerData, checkClipboardSilently]);
+
+  // 3. Real-time instant push via Server-Sent Events (SSE)
   useEffect(() => {
     let es: EventSource | null = null;
     try {
@@ -477,123 +770,19 @@ export default function App() {
     };
   }, [processIncomingEventItem]);
 
-  // 2. Periodic background sync fallback (every 3.5s)
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchAndProcessEvents = async () => {
-      try {
-        const res = await fetch('/api/webhook/events');
-        if (!res.ok) return;
-        const data = await res.json();
-
-        if (typeof data.count === 'number' && isMounted) {
-          setServerWebhookCount(data.count);
-        }
-
-        if (data.events && Array.isArray(data.events) && data.events.length > 0) {
-          // Process from oldest to newest
-          const eventsList = [...data.events].reverse();
-          for (const evt of eventsList) {
-            processIncomingEventItem(evt, false);
-          }
-        }
-      } catch {
-        // Silently ignore polling network glitches
-      }
-    };
-
-    fetchAndProcessEvents();
-    const interval = setInterval(fetchAndProcessEvents, 3500);
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, [processIncomingEventItem]);
-
-  // Handle Quick Paste from banner
-  const handleQuickPasteSubmit = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!quickPasteText.trim()) return;
-
-    const parsed = parseBidvNotificationLocally(quickPasteText, rules);
-    if (parsed.amount > 0) {
-      const newTx: Transaction = {
-        id: 'tx-quick-' + Date.now(),
-        accountNumber: parsed.accountNumber,
-        amount: parsed.amount,
-        type: parsed.isBidvDebit ? 'debit' : 'credit',
-        balance: parsed.balance,
-        timestamp: parsed.timestamp,
-        rawMessage: quickPasteText,
-        description: parsed.description,
-        merchant: parsed.merchant,
-        categoryId: parsed.suggestedCategoryId,
-        categoryReason: parsed.reasoning,
-        confidence: parsed.confidence,
-        source: 'sms_paste',
-        refNumber: parsed.refNumber,
-      };
-      handleAddTransaction(newTx);
-      setQuickPasteText('');
-      showToast(`Đã nhận diện: ${parsed.isBidvDebit ? '-' : '+'}${formatVND(parsed.amount)} (${parsed.description})`);
-    } else {
-      setSimulatorInitialText(quickPasteText);
-      setIsSimulatorOpen(true);
-      setQuickPasteText('');
-    }
-  };
-
-  // Instant 1-tap read from system Clipboard
-  const handleReadFromClipboard = async () => {
-    try {
-      if (!navigator.clipboard?.readText) {
-        showToast('Trình duyệt chưa cấp quyền clipboard. Bạn có thể bấm dán thủ công.');
-        return;
-      }
-      const clipText = await navigator.clipboard.readText();
-      if (!clipText || !clipText.trim()) {
-        showToast('Bộ nhớ tạm (Clipboard) của bạn đang trống');
-        return;
-      }
-
-      const parsed = parseBidvNotificationLocally(clipText, rules);
-      if (parsed.amount > 0) {
-        const newTx: Transaction = {
-          id: 'tx-clip-' + Date.now(),
-          accountNumber: parsed.accountNumber,
-          amount: parsed.amount,
-          type: parsed.isBidvDebit ? 'debit' : 'credit',
-          balance: parsed.balance,
-          timestamp: parsed.timestamp,
-          rawMessage: clipText,
-          description: parsed.description,
-          merchant: parsed.merchant,
-          categoryId: parsed.suggestedCategoryId,
-          categoryReason: 'Đọc tự động từ Clipboard: ' + parsed.reasoning,
-          confidence: parsed.confidence,
-          source: 'sms_paste',
-          refNumber: parsed.refNumber,
-        };
-        handleAddTransaction(newTx);
-        playTransactionChime();
-        showToast(`⚡ Đã nhận từ Clipboard: ${parsed.isBidvDebit ? '-' : '+'}${formatVND(parsed.amount)} (${parsed.description})`);
-      } else {
-        setQuickPasteText(clipText);
-        showToast('Đã dán văn bản từ Clipboard vào ô nhập');
-      }
-    } catch (err) {
-      console.warn('Clipboard read error:', err);
-      showToast('Vui lòng cho phép trình duyệt truy cập Clipboard');
-    }
-  };
-
   // Auto-import via URL parameter (?auto_import=... or ?text=...)
   useEffect(() => {
     try {
       const urlParams = new URLSearchParams(window.location.search);
-      const autoText = urlParams.get('auto_import') || urlParams.get('import') || urlParams.get('text');
+      const autoText =
+        urlParams.get('bidv') ||
+        urlParams.get('auto_import') ||
+        urlParams.get('import') ||
+        urlParams.get('text') ||
+        urlParams.get('msg') ||
+        urlParams.get('body') ||
+        urlParams.get('notification') ||
+        urlParams.get('not_body');
       if (autoText && autoText.trim()) {
         const decoded = decodeURIComponent(autoText.trim());
         const parsed = parseBidvNotificationLocally(decoded, rules);
@@ -609,14 +798,17 @@ export default function App() {
             description: parsed.description,
             merchant: parsed.merchant,
             categoryId: parsed.suggestedCategoryId,
-            categoryReason: 'Tự động bóc tách từ thông báo URL: ' + parsed.reasoning,
+            categoryReason: 'Tự động bóc tách từ thông báo BIDV: ' + parsed.reasoning,
             confidence: parsed.confidence,
             source: 'webhook',
             refNumber: parsed.refNumber,
           };
           handleAddTransaction(newTx);
+          if (parsed.balance !== undefined && parsed.balance > 0) {
+            setManualBalance(parsed.balance);
+          }
           playTransactionChime();
-          showToast(`⚡ Tự động thêm từ thông báo: ${parsed.isBidvDebit ? '-' : '+'}${formatVND(parsed.amount)} (${parsed.description})`);
+          showToast(`⚡ Đã ghi sổ tự động: ${parsed.isBidvDebit ? '-' : '+'}${formatVND(parsed.amount)} • Số dư: ${formatVND(parsed.balance || 0)}`);
         }
         const cleanUrl = window.location.pathname + window.location.hash;
         window.history.replaceState({}, document.title, cleanUrl);
@@ -637,7 +829,25 @@ export default function App() {
     (t) => t.refNumber === '039p9Qa-8CBF0805N' || (t.amount === 10000 && t.description.includes('an com trua'))
   );
 
+  const [dismissedLunchSample, setDismissedLunchSample] = useState<boolean>(() => {
+    return localStorage.getItem('bidv_dismiss_lunch_sample') === 'true';
+  });
+  const [dismissedRealSample, setDismissedRealSample] = useState<boolean>(() => {
+    return localStorage.getItem('bidv_dismiss_real_sample') === 'true';
+  });
+
+  const handleDismissLunchSample = () => {
+    setDismissedLunchSample(true);
+    localStorage.setItem('bidv_dismiss_lunch_sample', 'true');
+  };
+
+  const handleDismissRealSample = () => {
+    setDismissedRealSample(true);
+    localStorage.setItem('bidv_dismiss_real_sample', 'true');
+  };
+
   const handleAddUserSample = () => {
+    handleDismissRealSample();
     const parsed = parseBidvNotificationLocally(userRealSampleText, rules);
     const newTx: Transaction = {
       id: 'tx-user-sample-' + Date.now(),
@@ -660,6 +870,7 @@ export default function App() {
   };
 
   const handleAddLunchSample = () => {
+    handleDismissLunchSample();
     const parsed = parseBidvNotificationLocally(userLunchSampleText, rules);
     const newTx: Transaction = {
       id: 'tx-lunch-sample-' + Date.now(),
@@ -687,131 +898,57 @@ export default function App() {
       <Navbar
         latestBalance={latestBalance}
         totalSpentMonth={totalSpentMonth}
+        notifPermission={notifPermission}
         onOpenSimulator={() => setIsSimulatorOpen(true)}
-        onOpenWebhook={() => setIsWebhookOpen(true)}
-        onOpenRules={() => setIsRulesOpen(true)}
-        onOpenBudget={() => setIsBudgetOpen(true)}
+        onOpenSettings={handleOpenSettings}
         onOpenManualAdd={() => setIsManualAddOpen(true)}
         onExportData={handleExportData}
         autoProcessCount={transactions.filter((t) => t.source === 'sms_paste' || t.source === 'webhook').length}
         onOpenBalanceModal={() => setIsBalanceModalOpen(true)}
         onOpenMonthlyReport={() => setIsMonthlyReportOpen(true)}
-        onOpenPWAInstall={() => setIsPWAInstallOpen(true)}
+        onOpenWebhook={() => handleOpenSettings('webhook')}
+        onOpenRules={() => handleOpenSettings('rules')}
+        onOpenBudget={() => handleOpenSettings('budget')}
+        onOpenPWAInstall={() => handleOpenSettings('pwa')}
       />
+
+      {/* Optional Notification Opt-in Bar (Shown if permission is still 'default' and not dismissed) */}
+      {showNotifBanner && notifPermission === 'default' && (
+        <div className="bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-amber-500/10 border-b border-emerald-200/80 px-3 sm:px-6 py-2.5">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 text-slate-800 min-w-0">
+              <span className="p-1 rounded-md bg-emerald-100 text-emerald-800 shrink-0">
+                <BellRing className="w-4 h-4 animate-bounce" />
+              </span>
+              <span className="truncate sm:whitespace-normal">
+                <strong>Bật thông báo đẩy BIDV:</strong> Nhận thông báo tức thì khi có biến động số dư mới ngay cả khi chuyển tab hoặc ẩn ứng dụng.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleEnableNotificationsFromBanner}
+                className="px-3 py-1 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold rounded-lg shadow-2xs transition-colors cursor-pointer"
+              >
+                Bật Thông Báo
+              </button>
+              <button
+                type="button"
+                onClick={handleDismissNotifBanner}
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-md transition-colors cursor-pointer"
+                title="Đóng thanh thông báo"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Quick BIDV Notification Input Banner */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white shadow-sm relative overflow-hidden">
-          <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-emerald-500/10 blur-3xl pointer-events-none" />
-
-          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1.5 max-w-xl">
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  <span className={`w-2 h-2 rounded-full ${isLiveStreamConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
-                  <span>{isLiveStreamConnected ? 'Tự Động Bắt Biến Động BIDV: Real-time Kích Hoạt' : 'Tự Động Bắt Biến Động BIDV'}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsWebhookOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-white/10 hover:bg-white/20 text-slate-200 border border-white/15 transition-colors cursor-pointer"
-                  title="Bấm để xem nhật ký nhận tin MacroDroid"
-                >
-                  <Smartphone className="w-3 h-3 text-emerald-400" />
-                  <span>Webhook: {serverWebhookCount > 0 ? `Đã nhận ${serverWebhookCount} tin` : 'Đang chờ tin'}</span>
-                </button>
-              </div>
-              <h2 className="text-lg sm:text-xl font-bold tracking-tight">
-                Tự Động Ghi Sổ Chi Tiêu Khi BIDV Báo Biến Động Số Dư
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                Mỗi khi điện thoại nhận thông báo trừ tiền/cộng tiền từ BIDV SmartBanking, hệ thống tự động bóc tách số tiền, người nhận, danh mục chi tiêu và thêm vào sổ ngay lập tức kèm chuông thông báo.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <button
-                id="hero-btn-open-webhook"
-                onClick={() => setIsWebhookOpen(true)}
-                className="inline-flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl shadow-xs transition-all cursor-pointer"
-              >
-                <Smartphone className="w-4 h-4" />
-                Cài Đặt Điện Thoại Đẩy Tin
-              </button>
-
-              <button
-                id="hero-btn-open-simulator"
-                onClick={() => setIsSimulatorOpen(true)}
-                className="inline-flex items-center gap-2 px-3.5 py-2.5 text-xs sm:text-sm font-semibold bg-white/10 hover:bg-white/15 text-white rounded-xl border border-white/15 transition-all cursor-pointer"
-              >
-                <Zap className="w-4 h-4 text-emerald-400" />
-                Dán & Thử Nghiệm
-              </button>
-
-              <button
-                id="hero-btn-open-pwa"
-                onClick={() => setIsPWAInstallOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2.5 text-xs sm:text-sm font-semibold bg-emerald-950/60 hover:bg-emerald-950 text-emerald-300 rounded-xl border border-emerald-500/30 transition-all cursor-pointer"
-                title="Đưa ứng dụng ra màn hình chính điện thoại như App thật"
-              >
-                <Download className="w-4 h-4 text-emerald-400" />
-                Cài App Ra Màn Hình
-              </button>
-            </div>
-          </div>
-
-          {/* Inline Quick Paste input inside hero */}
-          <div className="mt-4 pt-3.5 border-t border-white/10">
-            <form onSubmit={handleQuickPasteSubmit} className="flex flex-col sm:flex-row gap-2">
-              <input
-                type="text"
-                value={quickPasteText}
-                onChange={(e) => setQuickPasteText(e.target.value)}
-                placeholder="Dán nhanh thông báo trừ tiền BIDV vào đây (VD: Thời gian GD... Số tiền GD: -10,000 VND)..."
-                className="flex-1 text-xs px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white placeholder-slate-400 outline-hidden focus:border-emerald-400 transition-all"
-              />
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleReadFromClipboard}
-                  className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold bg-white/15 hover:bg-white/25 text-white rounded-xl border border-white/20 transition-colors cursor-pointer"
-                  title="Tự động đọc tin nhắn vừa sao chép từ điện thoại"
-                >
-                  <Copy className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Đọc Clipboard</span>
-                </button>
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl shadow-xs transition-colors cursor-pointer"
-                >
-                  <Zap className="w-3.5 h-3.5" />
-                  Ghi sổ ngay
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* Quick sample chips */}
-          <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1 text-xs">
-            <span className="text-[11px] text-slate-400 font-medium shrink-0">Thử nhanh mẫu:</span>
-            {SAMPLE_BIDV_MESSAGES.slice(0, 4).map((sample, idx) => (
-              <button
-                key={idx}
-                onClick={() => {
-                  setSimulatorInitialText(sample.text);
-                  setIsSimulatorOpen(true);
-                }}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-[11px] font-medium shrink-0 transition-colors cursor-pointer"
-              >
-                <span>{sample.title}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* User BIDV Lunch notification prompt card (11:19 - an com trua) */}
-        {!isUserLunchSampleAdded && (
+        {!isUserLunchSampleAdded && !dismissedLunchSample && (
           <div className="p-3.5 sm:p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-300 text-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
             <div className="flex items-start sm:items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white font-extrabold flex items-center justify-center shrink-0 text-xs shadow-2xs">
@@ -839,12 +976,21 @@ export default function App() {
                 <PlusCircle className="w-4 h-4" />
                 + Ghi nhận vào sổ ngay (538.597đ)
               </button>
+              <button
+                type="button"
+                onClick={handleDismissLunchSample}
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-emerald-100/70 active:bg-emerald-200/70 rounded-xl transition-colors cursor-pointer"
+                title="Tắt thông báo này"
+                aria-label="Tắt thông báo"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
         )}
 
         {/* User BIDV notification prompt card */}
-        {!isUserRealSampleAdded && (
+        {!isUserRealSampleAdded && !dismissedRealSample && (
           <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-50 border border-amber-200 text-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-start sm:items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 font-extrabold flex items-center justify-center shrink-0 text-xs shadow-2xs">
@@ -867,6 +1013,15 @@ export default function App() {
                 <PlusCircle className="w-4 h-4" />
                 + Ghi nhận vào sổ ngay
               </button>
+              <button
+                type="button"
+                onClick={handleDismissRealSample}
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-amber-100/70 active:bg-amber-200/70 rounded-xl transition-colors cursor-pointer"
+                title="Tắt thông báo này"
+                aria-label="Tắt thông báo"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
         )}
@@ -876,7 +1031,7 @@ export default function App() {
           transactions={transactions}
           budgets={budgets}
           latestBalance={latestBalance}
-          onOpenBudgetModal={() => setIsBudgetOpen(true)}
+          onOpenBudgetModal={() => handleOpenSettings('budget')}
           onOpenBalanceModal={() => setIsBalanceModalOpen(true)}
           onOpenMonthlyReportModal={() => setIsMonthlyReportOpen(true)}
         />
@@ -927,6 +1082,27 @@ export default function App() {
       </footer>
 
       {/* Modals */}
+      {/* Master Unified Settings Modal */}
+      <UnifiedSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        initialTab={settingsActiveTab}
+        budgets={budgets}
+        onSaveBudgets={handleSaveBudgets}
+        currentSpentMonth={totalSpentMonth}
+        onReceiveWebhookTransaction={handleAddTransaction}
+        isLiveStreamConnected={isLiveStreamConnected}
+        serverWebhookCount={serverWebhookCount}
+        rules={rules}
+        onAddRule={handleAddRule}
+        onDeleteRule={handleDeleteRule}
+        latestBalance={latestBalance}
+        onUpdateBalance={handleSaveBalance}
+        onExportData={handleExportData}
+        onResetDemoData={handleResetDemoData}
+        onShowToast={showToast}
+      />
+
       <NotificationSimulator
         isOpen={isSimulatorOpen}
         onClose={() => setIsSimulatorOpen(false)}
@@ -954,6 +1130,7 @@ export default function App() {
         onClose={() => setIsBudgetOpen(false)}
         budgets={budgets}
         onSaveBudgets={handleSaveBudgets}
+        currentSpentMonth={totalSpentMonth}
       />
 
       <ManualAddModal

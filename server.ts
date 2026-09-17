@@ -11,6 +11,68 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// Bulletproof raw stream interceptor for webhooks BEFORE standard express.json
+// MacroDroid on Android often sends JSON strings containing unescaped raw newlines (\n byte),
+// which standard JSON.parse rejects with SyntaxError (HTTP 400 Bad Request).
+const WEBHOOK_PREFIXES = ['/api/webhook', '/webhook'];
+
+app.use((req: any, res: any, next: any) => {
+  const isWebhook = WEBHOOK_PREFIXES.some((p) => req.path.startsWith(p));
+  if (!isWebhook) {
+    return next();
+  }
+
+  let raw = '';
+  req.setEncoding('utf8');
+  req.on('data', (chunk: string) => {
+    raw += chunk;
+  });
+  req.on('end', () => {
+    req.rawBodyString = raw;
+    const trimmed = (raw || '').trim();
+
+    if (!trimmed) {
+      req.body = {};
+      req._body = true;
+      return next();
+    }
+
+    // 1. Try standard JSON parse
+    try {
+      req.body = JSON.parse(trimmed);
+      req._body = true;
+      return next();
+    } catch {
+      // 2. Sanitize unescaped newlines/tabs inside JSON quotes (MacroDroid multi-line notifications)
+      try {
+        const sanitized = trimmed.replace(/"([^"\\]*(\\.[^"\\]*)*)"/gs, (match) => {
+          return match
+            .replace(/\r\n/g, '\\n')
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\n')
+            .replace(/\t/g, '\\t');
+        });
+        req.body = JSON.parse(sanitized);
+        req._body = true;
+        return next();
+      } catch {
+        // 3. Fallback: extract "text" / "notification" value via regex
+        const textKeyMatch = trimmed.match(/"(?:text|notification|body|message)"\s*:\s*"([\s\S]*?)"\s*}/);
+        if (textKeyMatch) {
+          req.body = { text: textKeyMatch[1] };
+          req._body = true;
+          return next();
+        }
+
+        // 4. Fallback: treat entire body as raw text
+        req.body = { text: trimmed };
+        req._body = true;
+        return next();
+      }
+    }
+  });
+});
+
 app.use(
   express.json({
     limit: '10mb',
@@ -37,6 +99,17 @@ app.use(
     },
   })
 );
+
+// Safety net: Intercept any JSON parsing syntax errors and recover with rawBodyString
+app.use((err: any, req: any, _res: any, next: any) => {
+  if (err && (err.status === 400 || err.type === 'entity.parse.failed' || err instanceof SyntaxError)) {
+    console.warn('[Server] Caught JSON SyntaxError from body parser, recovering raw body:', err.message);
+    const raw = req.rawBodyString || '';
+    req.body = { text: raw };
+    return next();
+  }
+  next(err);
+});
 
 // Lazy init Gemini SDK
 let genAIClient: GoogleGenAI | null = null;
@@ -116,9 +189,51 @@ interface WebhookEventItem {
 
 const EVENTS_FILE = path.join(process.cwd(), 'data', 'webhook_events.json');
 const TRANSACTIONS_FILE = path.join(process.cwd(), 'data', 'transactions.json');
+const BUDGETS_FILE = path.join(process.cwd(), 'data', 'budgets.json');
+
+const DEFAULT_SERVER_BUDGETS = [
+  { categoryId: 'food', monthlyLimit: 4500000 },
+  { categoryId: 'shopping', monthlyLimit: 3500000 },
+  { categoryId: 'transport', monthlyLimit: 1500000 },
+  { categoryId: 'bills', monthlyLimit: 2000000 },
+  { categoryId: 'housing', monthlyLimit: 6000000 },
+  { categoryId: 'health', monthlyLimit: 1000000 },
+  { categoryId: 'education', monthlyLimit: 1200000 },
+  { categoryId: 'entertainment', monthlyLimit: 1500000 },
+  { categoryId: 'investment', monthlyLimit: 3000000 },
+  { categoryId: 'other', monthlyLimit: 1000000 },
+];
 
 let recentWebhookEvents: WebhookEventItem[] = [];
 let serverTransactions: any[] = [];
+let serverBudgets: any[] = [];
+
+try {
+  if (fs.existsSync(BUDGETS_FILE)) {
+    const raw = fs.readFileSync(BUDGETS_FILE, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      serverBudgets = parsed;
+    } else {
+      serverBudgets = [...DEFAULT_SERVER_BUDGETS];
+    }
+    console.log(`[Budgets] Loaded ${serverBudgets.length} persisted budgets`);
+  } else {
+    serverBudgets = [...DEFAULT_SERVER_BUDGETS];
+    saveBudgetsToDisk();
+  }
+} catch (e) {
+  console.warn('[Budgets] Could not load persisted budgets:', e);
+  serverBudgets = [...DEFAULT_SERVER_BUDGETS];
+}
+
+function saveBudgetsToDisk() {
+  try {
+    fs.writeFileSync(BUDGETS_FILE, JSON.stringify(serverBudgets, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('[Budgets] Error saving budgets to disk:', e);
+  }
+}
 
 try {
   if (!fs.existsSync(path.dirname(EVENTS_FILE))) {
@@ -144,6 +259,71 @@ try {
   console.warn('[Transactions] Could not load persisted transactions:', e);
   serverTransactions = [];
 }
+
+function sanitizePersistedData() {
+  try {
+    let changedTxs = false;
+    const cleanedTxs: any[] = [];
+    const seenKeys = new Set<string>();
+
+    for (const t of serverTransactions) {
+      if (t.rawMessage) {
+        const parsed = parseBidvNotificationLocally(t.rawMessage);
+        if (parsed.amount > 0) {
+          if (t.amount !== parsed.amount) changedTxs = true;
+          t.amount = parsed.amount;
+          t.description = parsed.description || t.description;
+          t.categoryId = parsed.suggestedCategoryId || t.categoryId;
+          t.balance = parsed.balance ?? t.balance;
+          t.accountNumber = parsed.accountNumber || t.accountNumber;
+          if (parsed.timestamp && t.timestamp !== parsed.timestamp) {
+            t.timestamp = parsed.timestamp;
+            changedTxs = true;
+          }
+        }
+      }
+
+      // Filter out invalid/bogus 13 VND or <= 100 VND transactions
+      if (t.amount <= 100) {
+        changedTxs = true;
+        continue;
+      }
+
+      const dedupeKey = `${t.amount}-${t.type}-${t.timestamp?.slice(0, 16)}-${t.description}`;
+      if (!seenKeys.has(dedupeKey)) {
+        seenKeys.add(dedupeKey);
+        cleanedTxs.push(t);
+      } else {
+        changedTxs = true;
+      }
+    }
+
+    if (changedTxs || cleanedTxs.length !== serverTransactions.length) {
+      serverTransactions = cleanedTxs;
+      saveTransactionsToDisk();
+      console.log(`[Transactions] Sanitized transactions: ${serverTransactions.length} remaining`);
+    }
+
+    // Also re-parse recentWebhookEvents so modal badges show correct real amount
+    let changedEvents = false;
+    for (const evt of recentWebhookEvents) {
+      if (evt.text) {
+        const p = parseBidvNotificationLocally(evt.text);
+        if (p.amount > 0) {
+          evt.parsedData = p;
+          changedEvents = true;
+        }
+      }
+    }
+    if (changedEvents) {
+      saveEventsToDisk();
+    }
+  } catch (err) {
+    console.warn('[Sanitize] Error sanitizing data:', err);
+  }
+}
+
+sanitizePersistedData();
 
 function saveEventsToDisk() {
   try {
@@ -200,7 +380,7 @@ Hãy bóc tách chính xác các thông tin:
 2. amount: Số tiền trừ (số nguyên dương VND, ví dụ 55000).
 3. accountNumber: Số tài khoản BIDV trong tin nhắn (nếu có, ví dụ 1234567890 hoặc ...6789).
 4. balance: Số dư còn lại sau giao dịch (nếu có, ví dụ 14845000).
-5. timestamp: Thời gian giao dịch theo chuẩn ISO 8601 nếu có ngày giờ trong tin nhắn.
+5. timestamp: Thời gian giao dịch theo chuẩn ISO 8601 kèm múi giờ Việt Nam +07:00 (ví dụ 15:36 17/09/2026 -> "2026-09-17T15:36:00+07:00").
 6. description: Nội dung chuyển khoản / giao dịch (phần ND hoặc nội dung).
 7. merchant: Đơn vị nhận tiền / cửa hàng / dịch vụ được nhận diện (ví dụ: HIGHLANDS COFFEE, EVN, SHOPEE, WINMART, GRAB, PHARMACITY, TIỀN THUÊ NHÀ).
 8. refNumber: Mã giao dịch / số tham chiếu (nếu có).
@@ -323,7 +503,13 @@ function extractWebhookText(req: express.Request & { rawBodyString?: string }): 
         try {
           const parsedK = JSON.parse(firstKey);
           if (parsedK && typeof parsedK === 'object') {
-            const kText = parsedK.text || parsedK.message || parsedK.content || parsedK.body || parsedK.not_body;
+            const kText =
+              parsedK.text ||
+              parsedK.notification ||
+              parsedK.message ||
+              parsedK.content ||
+              parsedK.body ||
+              parsedK.not_body;
             if (kText && typeof kText === 'string') parts.push(kText.trim());
           }
         } catch {
@@ -360,22 +546,30 @@ function extractWebhookText(req: express.Request & { rawBodyString?: string }): 
     if (qTicker && !isLiteralToken(qTicker)) parts.push(qTicker);
   }
 
-  // 3. Raw body string captured at stream level
-  const rawStr = (req.rawBodyString || (typeof rawBody === 'string' ? rawBody : '')).trim();
-  if (rawStr && rawStr !== '{}' && rawStr !== '[]' && !isLiteralToken(rawStr)) {
-    try {
-      const parsed = JSON.parse(rawStr);
-      if (typeof parsed === 'string') {
-        parts.push(parsed.trim());
-      } else if (parsed && typeof parsed === 'object') {
-        const pText = parsed.text || parsed.message || parsed.content || parsed.body || parsed.not_body;
-        const pTitle = parsed.not_title || parsed.title;
-        if (pTitle && typeof pTitle === 'string' && !isLiteralToken(pTitle)) parts.push(pTitle);
-        if (pText && typeof pText === 'string' && !isLiteralToken(pText)) parts.push(pText);
-      }
-    } catch {
-      if (!isLiteralToken(rawStr) && !parts.includes(rawStr)) {
-        parts.push(rawStr);
+  // 3. Raw body string captured at stream level (if not already found from req.body or query)
+  if (parts.length === 0) {
+    const rawStr = (req.rawBodyString || (typeof rawBody === 'string' ? rawBody : '')).trim();
+    if (rawStr && rawStr !== '{}' && rawStr !== '[]' && !isLiteralToken(rawStr)) {
+      try {
+        const parsed = JSON.parse(rawStr);
+        if (typeof parsed === 'string') {
+          parts.push(parsed.trim());
+        } else if (parsed && typeof parsed === 'object') {
+          const pText =
+            parsed.text ||
+            parsed.notification ||
+            parsed.message ||
+            parsed.content ||
+            parsed.body ||
+            parsed.not_body;
+          const pTitle = parsed.not_title || parsed.title;
+          if (pTitle && typeof pTitle === 'string' && !isLiteralToken(pTitle)) parts.push(pTitle);
+          if (pText && typeof pText === 'string' && !isLiteralToken(pText)) parts.push(pText);
+        }
+      } catch {
+        if (!isLiteralToken(rawStr) && !parts.includes(rawStr)) {
+          parts.push(rawStr);
+        }
       }
     }
   }
@@ -487,7 +681,18 @@ app.all(WEBHOOK_PATHS, async (req, res) => {
     let autoRecordedTx: any = null;
     if (parsedData.amount > 0) {
       const txId = 'tx-' + (parsedData.refNumber ? parsedData.refNumber.replace(/[^a-zA-Z0-9_-]/g, '') : eventId);
-      const isDuplicate = parsedData.refNumber && serverTransactions.some((t) => t.refNumber === parsedData.refNumber);
+      const isDuplicate = serverTransactions.some((t) => {
+        if (parsedData.refNumber && t.refNumber === parsedData.refNumber) return true;
+        if (t.id === txId) return true;
+        if (t.amount === parsedData.amount && t.type === (parsedData.isBidvDebit ? 'debit' : 'credit')) {
+          if (t.description === parsedData.description) return true;
+          if (t.rawMessage && t.rawMessage === textToParse) return true;
+          const timeA = new Date(t.timestamp).getTime();
+          const timeB = new Date(parsedData.timestamp).getTime();
+          if (!isNaN(timeA) && !isNaN(timeB) && Math.abs(timeA - timeB) < 120000) return true;
+        }
+        return false;
+      });
 
       if (!isDuplicate) {
         autoRecordedTx = {
@@ -638,6 +843,27 @@ app.delete('/api/transactions/:id', (req, res) => {
   serverTransactions = serverTransactions.filter((t) => t.id !== id);
   saveTransactionsToDisk();
   res.json({ success: true, message: 'Đã xóa giao dịch khỏi máy chủ' });
+});
+
+// Budgets API (Cross-Device & Persistent Server Storage)
+app.get('/api/budgets', (_req, res) => {
+  const budgetsToSend = (Array.isArray(serverBudgets) && serverBudgets.length > 0)
+    ? serverBudgets
+    : DEFAULT_SERVER_BUDGETS;
+  res.json({
+    budgets: budgetsToSend,
+    serverTime: new Date().toISOString(),
+  });
+});
+
+app.post('/api/budgets', (req, res) => {
+  const list = Array.isArray(req.body) ? req.body : req.body?.budgets;
+  if (Array.isArray(list) && list.length > 0) {
+    serverBudgets = list;
+    saveBudgetsToDisk();
+    return res.json({ success: true, count: serverBudgets.length });
+  }
+  return res.status(400).json({ error: 'Dữ liệu ngân sách không hợp lệ' });
 });
 
 // Get recent webhook events for real-time sync

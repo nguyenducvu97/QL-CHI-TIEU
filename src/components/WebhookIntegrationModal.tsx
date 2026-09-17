@@ -72,7 +72,7 @@ export const WebhookIntegrationModal: React.FC<WebhookIntegrationModalProps> = (
 
   const activeOrigin = useSharedUrl ? publicSharedOrigin : currentOrigin;
   const webhookPostUrl = `${activeOrigin}/api/webhook/bidv`;
-  const webhookGetUrl = `${activeOrigin}/api/webhook/bidv?text=[not_title] [not_body]`;
+  const webhookGetUrl = `${activeOrigin}/api/webhook/bidv?text=[not_title]%20[notification]`;
 
   // Generate QR code for phone scanning (pointing to the clean webhook URL)
   useEffect(() => {
@@ -133,7 +133,7 @@ export const WebhookIntegrationModal: React.FC<WebhookIntegrationModalProps> = (
   };
 
   const handleCopyBody = () => {
-    navigator.clipboard.writeText('{\n  "text": "[not_title] [not_body]"\n}');
+    navigator.clipboard.writeText('{\n  "text": "[not_title]\\n[notification]"\n}');
     setCopiedBody(true);
     setTimeout(() => setCopiedBody(false), 2000);
   };
@@ -362,7 +362,7 @@ export const WebhookIntegrationModal: React.FC<WebhookIntegrationModalProps> = (
                       <li>
                         <strong>Thêm Hành Động Dự Phòng (100% Không Bao Giờ Trượt):</strong>
                         <p className="text-slate-600 mt-0.5">
-                          Trong MacroDroid, bấm dấu <strong>+ Hành động</strong> $\rightarrow$ <strong>Khay nhớ tạm</strong> $\rightarrow$ <strong>Đặt văn bản</strong>: nhập <code>[not_title] [not_body]</code>. Khi có biến động, MacroDroid tự chép vào bộ nhớ tạm. Trên trang web bạn chỉ cần bấm nút <strong>"📋 Đọc Clipboard"</strong> là giao dịch tự thêm tức thì!
+                          Trong MacroDroid, bấm dấu <strong>+ Hành động</strong> $\rightarrow$ <strong>Khay nhớ tạm</strong> $\rightarrow$ <strong>Đặt văn bản</strong>: nhập <code>[not_title] [notification]</code> (chú ý dùng biến <code>[notification]</code>). Khi có biến động, MacroDroid tự chép vào bộ nhớ tạm. Khi mở app, phần mềm tự đọc và ghi sổ ngay!
                         </p>
                       </li>
                     </ol>
@@ -598,10 +598,15 @@ export const WebhookIntegrationModal: React.FC<WebhookIntegrationModalProps> = (
                         Nhìn lên thanh tab ở đỉnh màn hình điện thoại: Chọn tab thứ 3 <strong>"Nội dung" (Body)</strong>:
                         <div className="mt-1 space-y-1">
                           <p className="text-slate-600">Kiểu nội dung: Chọn <strong>application/json</strong></p>
-                          <p className="text-slate-600">Nội dung văn bản:</p>
-                          <div className="bg-slate-900 text-emerald-300 p-2 rounded-lg font-mono text-[11px]">
-                            {`{"text": "[not_title] [not_body]"}`}
+                          <p className="text-slate-600">
+                            Nội dung văn bản (<strong>Quan trọng:</strong> dùng biến <code>[notification]</code> để lấy nội dung tin nhắn, bấm nút ba chấm <code>...</code> $\rightarrow$ chọn <em>Văn bản thông báo / Notification text</em>):
+                          </p>
+                          <div className="bg-slate-900 text-emerald-300 p-2.5 rounded-lg font-mono text-[11px] select-all">
+                            {`{"text": "[not_title]\\n[notification]"}`}
                           </div>
+                          <p className="text-[11px] text-rose-600 font-medium">
+                            ⚠️ Lưu ý: Trong MacroDroid, tên biến là <code>[notification]</code> (KHÔNG phải <code>[not_body]</code>). Nếu viết <code>[not_body]</code> thì máy chủ chỉ nhận được chữ trắng không có số tiền.
+                          </p>
                         </div>
                       </li>
                       <li>
@@ -706,37 +711,85 @@ export const WebhookIntegrationModal: React.FC<WebhookIntegrationModalProps> = (
                     Danh sách gói tin MacroDroid đã gửi đến:
                   </span>
                   {serverEvents.map((evt) => {
-                    const parsed = evt.parsedData || parseBidvNotificationLocally(evt.text);
+                    const parsed = parseBidvNotificationLocally(evt.text);
                     return (
                       <div
                         key={evt.id}
-                        className="p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs hover:border-teal-300 transition-colors space-y-2 text-xs"
+                        className={`p-3.5 rounded-xl border bg-white shadow-2xs space-y-2 text-xs transition-colors ${
+                          parsed.amount > 0
+                            ? 'border-emerald-200 hover:border-emerald-300'
+                            : 'border-amber-200 bg-amber-50/30'
+                        }`}
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-slate-500 text-[11px]">
                             Nhận lúc: {formatDateTime(evt.receivedAt)}
                           </span>
-                          <span className="px-2 py-0.5 rounded-md bg-teal-50 text-teal-700 font-bold font-mono text-[11px] border border-teal-200">
-                            {parsed.isBidvDebit ? '-' : '+'}
-                            {formatVND(parsed.amount)}
-                          </span>
+                          {parsed.amount > 0 ? (
+                            <span
+                              className={`px-2 py-0.5 rounded-md font-bold font-mono text-[11px] border ${
+                                parsed.isBidvDebit
+                                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              }`}
+                            >
+                              {parsed.isBidvDebit ? '-' : '+'}
+                              {formatVND(parsed.amount)}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-semibold text-[11px] border border-amber-300">
+                              Chưa có số tiền (0 đ)
+                            </span>
+                          )}
                         </div>
 
                         <div className="p-2 rounded-lg bg-slate-50 font-mono text-[11px] text-slate-700 whitespace-pre-wrap break-all border border-slate-100">
                           {evt.text}
                         </div>
 
+                        {/* If text contained [not_body] or missing amount */}
+                        {parsed.amount === 0 && (
+                          <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[11px] space-y-1">
+                            <p className="font-bold flex items-center gap-1">
+                              <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                              Nguyên nhân không lấy được số tiền & số dư:
+                            </p>
+                            <p>
+                              Gói tin trên chỉ nhận được tiêu đề <em>"{evt.text}"</em> vì trong MacroDroid bạn đang điền chữ <code>[not_body]</code>.
+                            </p>
+                            <p className="font-semibold text-rose-900">
+                              👉 Cách sửa ngay trên MacroDroid: Sửa <code>[not_body]</code> thành <code>[notification]</code> (bấm nút ba chấm <code>...</code> $\rightarrow$ chọn <em>Văn bản thông báo</em>).
+                            </p>
+                          </div>
+                        )}
+
                         <div className="flex items-center justify-between pt-1">
-                          <span className="text-slate-500 text-[11px]">
-                            {parsed.description || 'Không có mô tả'} • TK: {parsed.accountNumber}
-                          </span>
-                          <button
-                            onClick={() => handleImportSingleEvent(evt)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <PlusCircle className="w-3.5 h-3.5" />
-                            Ghi vào sổ ngay
-                          </button>
+                          <div className="text-slate-600 text-[11px] space-y-0.5">
+                            <div>
+                              <span className="font-medium text-slate-800">{parsed.description || 'Không có mô tả'}</span>
+                              {parsed.accountNumber && (
+                                <span className="text-slate-400"> • TK: {parsed.accountNumber}</span>
+                              )}
+                            </div>
+                            {parsed.balance !== undefined && (
+                              <div className="text-emerald-700 font-semibold font-mono text-[11px]">
+                                💰 Số dư tài khoản: {formatVND(parsed.balance)}
+                              </div>
+                            )}
+                          </div>
+                          {parsed.amount > 0 ? (
+                            <button
+                              onClick={() => handleImportSingleEvent(evt)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <PlusCircle className="w-3.5 h-3.5" />
+                              Ghi vào sổ ngay
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic">
+                              Cần cấu hình [notification]
+                            </span>
+                          )}
                         </div>
                       </div>
                     );

@@ -1,4 +1,5 @@
 import { Transaction } from '../types';
+import { parseBidvNotificationLocally } from '../utils/bidvParser';
 
 export interface SampleBidvMessage {
   title: string;
@@ -76,7 +77,7 @@ export const SAMPLE_BIDV_MESSAGES: SampleBidvMessage[] = [
   }
 ];
 
-export const INITIAL_TRANSACTIONS: Transaction[] = [
+const RAW_MOCK_TRANSACTIONS: Transaction[] = [
   {
     id: 'tx-1',
     accountNumber: '1234567890',
@@ -337,3 +338,13 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
     source: 'demo',
   }
 ];
+
+export const INITIAL_TRANSACTIONS: Transaction[] = RAW_MOCK_TRANSACTIONS.map((t) => {
+  if (t.rawMessage) {
+    const p = parseBidvNotificationLocally(t.rawMessage);
+    if (p.timestamp) {
+      return { ...t, timestamp: p.timestamp };
+    }
+  }
+  return t;
+});

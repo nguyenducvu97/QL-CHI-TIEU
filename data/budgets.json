@@ -1,0 +1,42 @@
+[
+  {
+    "categoryId": "food",
+    "monthlyLimit": 4500000
+  },
+  {
+    "categoryId": "shopping",
+    "monthlyLimit": 3500000
+  },
+  {
+    "categoryId": "transport",
+    "monthlyLimit": 1500000
+  },
+  {
+    "categoryId": "bills",
+    "monthlyLimit": 2000000
+  },
+  {
+    "categoryId": "housing",
+    "monthlyLimit": 6000000
+  },
+  {
+    "categoryId": "health",
+    "monthlyLimit": 1000000
+  },
+  {
+    "categoryId": "education",
+    "monthlyLimit": 1200000
+  },
+  {
+    "categoryId": "entertainment",
+    "monthlyLimit": 1500000
+  },
+  {
+    "categoryId": "investment",
+    "monthlyLimit": 3000000
+  },
+  {
+    "categoryId": "other",
+    "monthlyLimit": 1000000
+  }
+]
