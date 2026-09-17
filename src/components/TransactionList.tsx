@@ -48,6 +48,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   const [sourceFilter, setSourceFilter] = useState<'all' | 'webhook' | 'sms_paste' | 'manual'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'debit' | 'credit'>('all');
   const [inspectTx, setInspectTx] = useState<Transaction | null>(null);
+  const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
 
   // Extract all unique months available in transactions
   const availableMonths = useMemo(() => {
@@ -297,10 +298,10 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         {/* Filter Controls: Search, Debit/Credit Type Tabs, Source */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
           {/* Type Tabs (Tất cả / Chi tiêu - / Cộng tiền +) */}
-          <div className="inline-flex items-center p-1 rounded-xl bg-slate-100 text-xs font-semibold shrink-0">
+          <div className="grid grid-cols-3 sm:flex items-center p-1 rounded-xl bg-slate-100 text-xs font-semibold shrink-0 w-full sm:w-auto">
             <button
               onClick={() => setTypeFilter('all')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+              className={`px-2 sm:px-3 py-1.5 sm:py-1 rounded-lg transition-all cursor-pointer text-center truncate ${
                 typeFilter === 'all'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -310,30 +311,30 @@ export const TransactionList: React.FC<TransactionListProps> = ({
             </button>
             <button
               onClick={() => setTypeFilter('debit')}
-              className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg transition-all cursor-pointer ${
+              className={`inline-flex items-center justify-center gap-1 px-2 sm:px-3 py-1.5 sm:py-1 rounded-lg transition-all cursor-pointer text-center truncate ${
                 typeFilter === 'debit'
                   ? 'bg-red-500 text-white shadow-2xs'
                   : 'text-red-700 hover:bg-red-50'
               }`}
             >
-              <TrendingDown className="w-3 h-3" />
-              Chi tiêu (-{monthStats.debitCount})
+              <TrendingDown className="w-3 h-3 shrink-0" />
+              <span className="truncate">Chi (-{monthStats.debitCount})</span>
             </button>
             <button
               onClick={() => setTypeFilter('credit')}
-              className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg transition-all cursor-pointer ${
+              className={`inline-flex items-center justify-center gap-1 px-2 sm:px-3 py-1.5 sm:py-1 rounded-lg transition-all cursor-pointer text-center truncate ${
                 typeFilter === 'credit'
                   ? 'bg-emerald-600 text-white shadow-2xs'
                   : 'text-emerald-700 hover:bg-emerald-50'
               }`}
             >
-              <TrendingUp className="w-3 h-3" />
-              Cộng tiền (+{monthStats.creditCount})
+              <TrendingUp className="w-3 h-3 shrink-0" />
+              <span className="truncate">Thu (+{monthStats.creditCount})</span>
             </button>
           </div>
 
           {/* Search Box */}
-          <div className="relative min-w-[240px] flex-1 sm:max-w-xs">
+          <div className="relative min-w-[200px] flex-1 sm:max-w-xs">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               id="search-transactions"
@@ -395,105 +396,67 @@ export const TransactionList: React.FC<TransactionListProps> = ({
             return (
               <div
                 key={tx.id}
-                className="p-4 hover:bg-slate-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                className="p-3.5 sm:p-4 hover:bg-slate-50/70 transition-colors flex flex-col gap-2.5"
               >
-                {/* Left: Category Icon & Details */}
-                <div className="flex items-start gap-3 min-w-0">
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border"
-                    style={{
-                      backgroundColor: isCredit ? '#ecfdf5' : cat.bgColor,
-                      borderColor: isCredit ? '#a7f3d0' : cat.borderColor,
-                      color: isCredit ? '#059669' : cat.color,
-                    }}
-                  >
-                    {isCredit ? (
-                      <TrendingUp className="w-5 h-5 text-emerald-600" />
-                    ) : (
-                      <CategoryIcon categoryId={tx.categoryId} className="w-5 h-5" />
-                    )}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-sm text-slate-900 truncate">
-                        {tx.merchant || tx.description}
-                      </span>
-
-                      {/* Credit vs Debit Badge */}
-                      {isCredit ? (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200">
-                          <ArrowUpRight className="w-2.5 h-2.5" />
-                          + CỘNG TIỀN
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
-                          <ArrowDownRight className="w-2.5 h-2.5 text-red-500" />
-                          Chi tiêu
-                        </span>
-                      )}
-
-                      {/* Source badge */}
-                      {tx.source === 'webhook' && (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded border border-teal-200">
-                          <Smartphone className="w-2.5 h-2.5" />
-                          Webhook
-                        </span>
-                      )}
-                      {tx.source === 'sms_paste' && (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">
-                          <Zap className="w-2.5 h-2.5" />
-                          BIDV SMS
-                        </span>
-                      )}
-                    </div>
-
-                    <p className="text-xs text-slate-500 truncate mt-0.5">
-                      {tx.description}
-                    </p>
-
-                    <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-1">
-                      <span>{formatDateTime(tx.timestamp)}</span>
-                      <span>•</span>
-                      <span>TK BIDV: {tx.accountNumber}</span>
-                      {tx.categoryReason && (
-                        <>
-                          <span>•</span>
-                          <span
-                            className={`font-medium truncate max-w-[220px] ${
-                              isCredit ? 'text-teal-700' : 'text-emerald-700'
-                            }`}
-                          >
-                            {tx.categoryReason}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right: Amount & Quick Actions */}
-                <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 shrink-0 pl-13 sm:pl-0">
-                  {/* Category Dropdown Selector */}
-                  <div className="relative">
-                    <select
-                      value={tx.categoryId}
-                      onChange={(e) => onUpdateCategory(tx.id, e.target.value as CategoryId)}
-                      className="text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200/70 border border-slate-200 rounded-lg px-2 py-1 outline-hidden cursor-pointer"
-                      title="Nhấn để đổi danh mục"
+                {/* Top Row: Left (Icon + Merchant + Badges) | Right (Amount + Balance) */}
+                <div className="flex items-start justify-between gap-2.5">
+                  {/* Left: Icon & Merchant */}
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border shadow-2xs"
+                      style={{
+                        backgroundColor: isCredit ? '#ecfdf5' : cat.bgColor,
+                        borderColor: isCredit ? '#a7f3d0' : cat.borderColor,
+                        color: isCredit ? '#059669' : cat.color,
+                      }}
                     >
-                      {DEFAULT_CATEGORIES.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
+                      {isCredit ? (
+                        <TrendingUp className="w-5 h-5 text-emerald-600" />
+                      ) : (
+                        <CategoryIcon categoryId={tx.categoryId} className="w-5 h-5" />
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-bold text-sm text-slate-900 truncate max-w-[150px] sm:max-w-xs">
+                          {tx.merchant || tx.description}
+                        </span>
+
+                        {/* Credit vs Debit Badge */}
+                        {isCredit ? (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0">
+                            <ArrowUpRight className="w-2.5 h-2.5" />
+                            + CỘNG TIỀN
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-medium bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded shrink-0">
+                            <ArrowDownRight className="w-2.5 h-2.5 text-red-500" />
+                            Chi tiêu
+                          </span>
+                        )}
+
+                        {/* Source badge */}
+                        {tx.source === 'webhook' && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded border border-teal-200 shrink-0">
+                            <Smartphone className="w-2.5 h-2.5" />
+                            Webhook
+                          </span>
+                        )}
+                        {tx.source === 'sms_paste' && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0">
+                            <Zap className="w-2.5 h-2.5" />
+                            BIDV SMS
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Amount (Green for Credit, Red for Debit) */}
-                  <div className="text-right">
+                  {/* Right: Amount & Balance (Always clearly visible in top corner) */}
+                  <div className="text-right shrink-0">
                     <span
-                      className={`font-bold text-base font-mono block ${
+                      className={`font-bold text-base sm:text-lg font-mono block tracking-tight ${
                         isCredit ? 'text-emerald-600' : 'text-red-600'
                       }`}
                     >
@@ -506,22 +469,69 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                       </span>
                     )}
                   </div>
+                </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex items-center gap-1">
+                {/* Middle Row: Full Transfer Description & Transaction Meta */}
+                <div className="pl-12.5 text-xs text-slate-500 -mt-1 space-y-0.5">
+                  <p className="line-clamp-2 sm:truncate text-slate-600 text-xs leading-snug">
+                    {tx.description}
+                  </p>
+                  <div className="flex items-center gap-2 flex-wrap text-[11px] text-slate-400">
+                    <span>{formatDateTime(tx.timestamp)}</span>
+                    <span>•</span>
+                    <span>TK BIDV: {tx.accountNumber}</span>
+                    {tx.categoryReason && (
+                      <>
+                        <span>•</span>
+                        <span
+                          className={`font-medium truncate max-w-[170px] sm:max-w-xs ${
+                            isCredit ? 'text-teal-700' : 'text-emerald-700'
+                          }`}
+                        >
+                          {tx.categoryReason}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bottom Row: Category Selector & Full Touch Action Buttons */}
+                <div className="pl-12.5 flex items-center justify-between gap-2 pt-1 border-t border-slate-100/80">
+                  {/* Category Dropdown Selector */}
+                  <div className="relative min-w-0 max-w-[170px] sm:max-w-xs">
+                    <select
+                      value={tx.categoryId}
+                      onChange={(e) => onUpdateCategory(tx.id, e.target.value as CategoryId)}
+                      className="w-full text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 rounded-lg px-2.5 py-1.5 outline-hidden cursor-pointer truncate"
+                      title="Nhấn để đổi danh mục"
+                    >
+                      {DEFAULT_CATEGORIES.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Quick Action Buttons (Eye & Trash) - clearly visible and comfortable touch targets */}
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button
+                      type="button"
                       onClick={() => setInspectTx(tx)}
-                      className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                      className="inline-flex items-center justify-center p-2 text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-lg transition-colors cursor-pointer"
                       title="Xem tin nhắn BIDV gốc"
+                      aria-label="Xem tin nhắn gốc"
                     >
                       <Eye className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => onDeleteTransaction(tx.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                      title="Xóa giao dịch"
+                      type="button"
+                      onClick={() => setTxToDelete(tx)}
+                      className="inline-flex items-center justify-center p-2 text-red-600 bg-red-50 hover:bg-red-100 active:bg-red-200 border border-red-200/80 rounded-lg transition-all cursor-pointer"
+                      title="Xóa giao dịch này"
+                      aria-label="Xóa giao dịch"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4 text-red-600" />
                     </button>
                   </div>
                 </div>
@@ -627,13 +637,103 @@ export const TransactionList: React.FC<TransactionListProps> = ({
               )}
             </div>
 
-            <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 text-right">
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
               <button
+                type="button"
+                onClick={() => {
+                  const toDel = inspectTx;
+                  setInspectTx(null);
+                  setTxToDelete(toDel);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 active:bg-red-200 border border-red-200 rounded-lg transition-colors cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Xóa giao dịch này
+              </button>
+              <button
+                type="button"
                 onClick={() => setInspectTx(null)}
                 className="px-4 py-2 text-xs font-semibold bg-slate-800 text-white hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
               >
                 Đóng
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {txToDelete && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Xác nhận xóa giao dịch?
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Giao dịch này sẽ bị xóa khỏi danh sách và số liệu báo cáo sẽ được cập nhật lại.
+                  </p>
+                </div>
+              </div>
+
+              {/* Transaction Summary Card */}
+              <div className="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
+                <div className="flex justify-between items-center gap-2">
+                  <span className="text-slate-500 shrink-0">Giao dịch:</span>
+                  <span className="font-bold text-slate-800 truncate text-right">
+                    {txToDelete.merchant || txToDelete.description}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Số tiền:</span>
+                  <span
+                    className={`font-mono font-bold text-sm ${
+                      txToDelete.type === 'credit' ? 'text-emerald-600' : 'text-red-600'
+                    }`}
+                  >
+                    {txToDelete.type === 'credit' ? '+' : '-'}
+                    {formatVND(txToDelete.amount)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Thời gian:</span>
+                  <span className="text-slate-700">{formatDateTime(txToDelete.timestamp)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Danh mục:</span>
+                  <span className="font-medium text-slate-800">
+                    {getCategoryById(txToDelete.categoryId).name}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-5 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setTxToDelete(null)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-xl transition-colors cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const idToDelete = txToDelete.id;
+                    setTxToDelete(null);
+                    onDeleteTransaction(idToDelete);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-xl transition-colors shadow-xs cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Xác nhận xóa
+                </button>
+              </div>
             </div>
           </div>
         </div>
