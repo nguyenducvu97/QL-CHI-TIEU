@@ -1,0 +1,7 @@
+{
+  "name": "BIDV Expense Tracker - Quản Lý Chi Tiêu Tự Động",
+  "description": "Phần mềm tự động nhận diện và phân tích thông báo trừ tiền ngân hàng BIDV, tự động phân loại danh mục chi tiêu và quản lý ngân sách thông minh.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
