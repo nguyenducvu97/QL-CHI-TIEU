@@ -1,0 +1,82 @@
+[
+  {
+    "id": "wb-1789629118964-dppd2",
+    "receivedAt": "2026-09-17T07:11:58.964Z",
+    "text": "Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua",
+    "source": "curl/7.88.1",
+    "parsedData": {
+      "success": true,
+      "isBidvDebit": true,
+      "amount": 65000,
+      "currency": "VND",
+      "accountNumber": "8832123271",
+      "balance": 14685000,
+      "timestamp": "2026-09-17T13:52:00.000Z",
+      "description": "Chuyen tien an trua Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND  Chuyen tien an trua",
+      "suggestedCategoryId": "food",
+      "confidence": 0.95,
+      "reasoning": "Khớp từ khóa nhận diện: \"an trua\"",
+      "rawText": "Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua"
+    }
+  },
+  {
+    "id": "wb-1789628460948-f6qwx",
+    "receivedAt": "2026-09-17T07:01:00.948Z",
+    "text": "Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua",
+    "source": "curl/7.88.1",
+    "parsedData": {
+      "success": true,
+      "isBidvDebit": true,
+      "amount": 65000,
+      "currency": "VND",
+      "accountNumber": "8832123271",
+      "balance": 14685000,
+      "timestamp": "2026-09-17T13:52:00.000Z",
+      "description": "Chuyen tien an trua Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND  Chuyen tien an trua",
+      "suggestedCategoryId": "food",
+      "confidence": 0.95,
+      "reasoning": "Khớp từ khóa nhận diện: \"an trua\"",
+      "rawText": "Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua"
+    }
+  },
+  {
+    "id": "wb-1789628458408-u7oxy",
+    "receivedAt": "2026-09-17T07:00:58.408Z",
+    "text": "Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua",
+    "source": "curl/7.88.1",
+    "parsedData": {
+      "success": true,
+      "isBidvDebit": true,
+      "amount": 65000,
+      "currency": "VND",
+      "accountNumber": "8832123271",
+      "balance": 14685000,
+      "timestamp": "2026-09-17T13:52:00.000Z",
+      "description": "Chuyen tien an trua Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND  Chuyen tien an trua",
+      "suggestedCategoryId": "food",
+      "confidence": 0.95,
+      "reasoning": "Khớp từ khóa nhận diện: \"an trua\"",
+      "rawText": "Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua"
+    }
+  },
+  {
+    "id": "wb-1789628373142-jef8b",
+    "receivedAt": "2026-09-17T06:59:33.142Z",
+    "text": "Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua",
+    "source": "curl/7.88.1",
+    "parsedData": {
+      "success": true,
+      "isBidvDebit": true,
+      "amount": 13,
+      "currency": "VND",
+      "accountNumber": "8832123271",
+      "balance": 14685000,
+      "timestamp": "2026-09-17T13:52:00.000Z",
+      "description": "Chuyen tien an trua Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND  Chuyen tien an trua",
+      "suggestedCategoryId": "food",
+      "confidence": 0.95,
+      "reasoning": "Khớp từ khóa nhận diện: \"an trua\"",
+      "rawText": "Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua Thông báo BIDV Thời gian giao dịch: 13:52 17/09/2026 Tài khoản thanh toán: 8832123271 Số tiền giao dịch: -65,000 VND Số dư cuối: 14,685,000 VND Nội dung: Chuyen tien an trua"
+    }
+  }
+]

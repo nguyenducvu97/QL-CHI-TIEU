@@ -36,6 +36,8 @@ export interface Transaction {
   confidence?: number; // 0 to 1
   source: 'manual' | 'sms_paste' | 'webhook' | 'demo';
   refNumber?: string; // e.g. "FT26258123456"
+  isAutoRecorded?: boolean; // Tự động ghi sổ từ ngân hàng BIDV
+  reviewed?: boolean; // Người dùng đã xác nhận / kiểm tra
 }
 
 export interface CategoryBudget {

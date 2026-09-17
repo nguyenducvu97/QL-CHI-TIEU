@@ -1,0 +1,98 @@
+[
+  {
+    "id": "tr-1789629118964-0j64",
+    "time": "2026-09-17T07:11:58.964Z",
+    "method": "POST",
+    "url": "/api/webhook/bidv",
+    "ip": "127.0.0.1",
+    "userAgent": "curl/7.88.1",
+    "bodyPreview": "{\"text\":\"Thông báo BIDV\\nThời gian giao dịch: 13:52 17/09/2026\\nTài khoản thanh toán: 8832123271\\nSố tiền giao dịch: -65,000 VND\\nSố dư cuối: 14,685,000 VND\\nNội dung: Chuyen tien an trua\"}",
+    "query": {},
+    "status": "processed",
+    "detail": "Đã bóc tách thành công: 65000 VND (food)"
+  },
+  {
+    "id": "tr-1789628460948-qofr",
+    "time": "2026-09-17T07:01:00.948Z",
+    "method": "POST",
+    "url": "/api/webhook/bidv",
+    "ip": "127.0.0.1",
+    "userAgent": "curl/7.88.1",
+    "bodyPreview": "{\"text\":\"Thông báo BIDV\\nThời gian giao dịch: 13:52 17/09/2026\\nTài khoản thanh toán: 8832123271\\nSố tiền giao dịch: -65,000 VND\\nSố dư cuối: 14,685,000 VND\\nNội dung: Chuyen tien an trua\"}",
+    "query": {},
+    "status": "processed",
+    "detail": "Đã bóc tách thành công: 65000 VND (food)"
+  },
+  {
+    "id": "tr-1789628458409-1gf7",
+    "time": "2026-09-17T07:00:58.409Z",
+    "method": "POST",
+    "url": "/api/webhook/bidv",
+    "ip": "127.0.0.1",
+    "userAgent": "curl/7.88.1",
+    "bodyPreview": "{\"text\":\"Thông báo BIDV\\nThời gian giao dịch: 13:52 17/09/2026\\nTài khoản thanh toán: 8832123271\\nSố tiền giao dịch: -65,000 VND\\nSố dư cuối: 14,685,000 VND\\nNội dung: Chuyen tien an trua\"}",
+    "query": {},
+    "status": "processed",
+    "detail": "Đã bóc tách thành công: 65000 VND (food)"
+  },
+  {
+    "id": "tr-1789628373142-q40c",
+    "time": "2026-09-17T06:59:33.142Z",
+    "method": "POST",
+    "url": "/api/webhook/bidv",
+    "ip": "127.0.0.1",
+    "userAgent": "curl/7.88.1",
+    "bodyPreview": "{\"text\":\"Thông báo BIDV\\nThời gian giao dịch: 13:52 17/09/2026\\nTài khoản thanh toán: 8832123271\\nSố tiền giao dịch: -65,000 VND\\nSố dư cuối: 14,685,000 VND\\nNội dung: Chuyen tien an trua\"}",
+    "query": {},
+    "status": "processed",
+    "detail": "Đã bóc tách thành công: 13 VND (food)"
+  },
+  {
+    "id": "tr-1789623114983-cl8p",
+    "time": "2026-09-17T05:31:54.983Z",
+    "method": "POST",
+    "url": "/api/webhook/bidv",
+    "ip": "127.0.0.1",
+    "userAgent": "curl/7.88.1",
+    "bodyPreview": "{\"text\":\"[not_title] [not_body]\"}",
+    "query": {},
+    "status": "received",
+    "detail": "Kiểm tra kết nối từ điện thoại thành công (chưa có thông báo BIDV thật)"
+  },
+  {
+    "id": "tr-1789623112419-ihqs",
+    "time": "2026-09-17T05:31:52.419Z",
+    "method": "POST",
+    "url": "/api/webhook/bidv",
+    "ip": "127.0.0.1",
+    "userAgent": "curl/7.88.1",
+    "bodyPreview": "{\"text\":\"[not_title] TK 8832123271 tai BIDV -25.000VND. So du: 14.725.000VND. ND: Gui xe [not_body]\"}",
+    "query": {},
+    "status": "processed",
+    "detail": "Đã bóc tách thành công: 25000 VND (transport)"
+  },
+  {
+    "id": "tr-1789623107024-m93s",
+    "time": "2026-09-17T05:31:47.024Z",
+    "method": "POST",
+    "url": "/api/webhook/bidv",
+    "ip": "127.0.0.1",
+    "userAgent": "curl/7.88.1",
+    "bodyPreview": "{\"not_title\":\"SmartBanking\",\"not_body\":\"TK 8832123271 tai BIDV -45,000VND vao 17/09/2026. So du: 14,750,000VND. ND: Highlands Coffee\"}",
+    "query": {},
+    "status": "processed",
+    "detail": "Đã bóc tách thành công: 45000 VND (food)"
+  },
+  {
+    "id": "tr-1789622978160-nw6u",
+    "time": "2026-09-17T05:29:38.160Z",
+    "method": "POST",
+    "url": "/api/webhook/bidv",
+    "ip": "127.0.0.1",
+    "userAgent": "curl/7.88.1",
+    "bodyPreview": "{\"not_title\":\"SmartBanking\",\"not_body\":\"TK 8832123271 tai BIDV -120,000VND vao 17/09/2026 12:20. So du: 14,880,000VND. ND: ShopeePay thanh toan don hang\"}",
+    "query": {},
+    "status": "processed",
+    "detail": "Đã bóc tách thành công: 120000 VND (shopping)"
+  }
+]

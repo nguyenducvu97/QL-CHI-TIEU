@@ -10,7 +10,7 @@ export const DEFAULT_CATEGORIES: CategoryInfo[] = [
     borderColor: '#fed7aa', // orange-200
     defaultBudget: 4500000, // 4.5 triệu
     keywords: [
-      'coffee', 'cafe', 'highlands', 'starbucks', 'phuc long', 'tra sua',
+      'an uong', 'coffee', 'cafe', 'highlands', 'starbucks', 'phuc long', 'tra sua',
       'com', 'pho', 'bun', 'lau', 'nuong', 'kichi', 'gogi', 'pizza',
       'lotteria', 'kfc', 'mcdonald', 'burger', 'an sang', 'an trua', 'an toi',
       'banh mi', 'grabfood', 'shopeefood', 'baemin', 'quan an', 'nha hang'
@@ -121,7 +121,8 @@ export const DEFAULT_CATEGORIES: CategoryInfo[] = [
     defaultBudget: 3000000,
     keywords: [
       'tiet kiem', 'chung khoan', 'vps', 'ssi', 'tcbs', 'vndirect', 'tra no',
-      'vay', 'bao hiem', 'manulife', 'prudential', 'phi duy tri', 'phi the'
+      'vay', 'bao hiem', 'manulife', 'prudential', 'phi duy tri', 'phi the',
+      'momo', 'cashinmomo', 'zalopay', 'vnpay', 'viettelpay', 'viettel money', 'vi dien tu'
     ],
   },
   {
@@ -132,7 +133,7 @@ export const DEFAULT_CATEGORIES: CategoryInfo[] = [
     bgColor: '#f8fafc',
     borderColor: '#e2e8f0',
     defaultBudget: 1000000,
-    keywords: ['chuyen tien', 'rut tien', 'atm', 'khac', 'chi tieu'],
+    keywords: ['chuyen tien', 'rut tien', 'atm', 'chi tieu', 'khac nhau'],
   },
 ];
 

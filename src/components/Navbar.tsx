@@ -24,6 +24,7 @@ interface NavbarProps {
   autoProcessCount: number;
   onOpenBalanceModal: () => void;
   onOpenMonthlyReport?: () => void;
+  onOpenPWAInstall?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -38,6 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   autoProcessCount,
   onOpenBalanceModal,
   onOpenMonthlyReport,
+  onOpenPWAInstall,
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-xs">
@@ -117,6 +119,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600" />
                 <span className="hidden lg:inline">Báo Cáo Tháng</span>
+              </button>
+            )}
+
+            {onOpenPWAInstall && (
+              <button
+                id="btn-open-pwa-install"
+                onClick={onOpenPWAInstall}
+                className="inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200/80 border border-emerald-200/80 rounded-lg transition-colors cursor-pointer"
+                title="Hướng dẫn cài đặt ứng dụng / Thêm icon ra màn hình chính điện thoại"
+              >
+                <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" />
+                <span className="hidden sm:inline">Cài App</span>
               </button>
             )}
 

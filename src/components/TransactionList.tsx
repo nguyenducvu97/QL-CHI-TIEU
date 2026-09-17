@@ -18,16 +18,19 @@ import {
   TrendingDown,
   TrendingUp,
   SlidersHorizontal,
+  Edit3,
 } from 'lucide-react';
 import { CategoryId, Transaction } from '../types';
 import { DEFAULT_CATEGORIES, getCategoryById } from '../data/categories';
 import { formatVND, formatDateTime } from '../utils/bidvParser';
 import { CategoryIcon } from './CategoryIcon';
+import { EditTransactionModal } from './EditTransactionModal';
 
 interface TransactionListProps {
   transactions: Transaction[];
   onUpdateCategory: (txId: string, newCatId: CategoryId) => void;
   onDeleteTransaction: (txId: string) => void;
+  onSaveTransaction?: (updatedTx: Transaction) => void;
   onOpenSimulator: () => void;
   selectedMonth: string; // 'all' or 'YYYY-MM'
   onSelectMonth: (monthKey: string) => void;
@@ -38,6 +41,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   transactions,
   onUpdateCategory,
   onDeleteTransaction,
+  onSaveTransaction,
   onOpenSimulator,
   selectedMonth,
   onSelectMonth,
@@ -48,6 +52,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   const [sourceFilter, setSourceFilter] = useState<'all' | 'webhook' | 'sms_paste' | 'manual'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'debit' | 'credit'>('all');
   const [inspectTx, setInspectTx] = useState<Transaction | null>(null);
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [txToDelete, setTxToDelete] = useState<Transaction | null>(null);
 
   // Extract all unique months available in transactions
@@ -127,6 +132,10 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     };
   }, [transactions, selectedMonth]);
 
+  const autoRecordedCount = useMemo(() => {
+    return transactions.filter((t) => t.source === 'webhook' || t.isAutoRecorded).length;
+  }, [transactions]);
+
   // Filtered transactions considering all search, month, type, category, and source filters
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
@@ -149,8 +158,12 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       }
 
       // Source filter
-      if (sourceFilter !== 'all' && t.source !== sourceFilter) {
-        return false;
+      if (sourceFilter !== 'all') {
+        if (sourceFilter === 'webhook') {
+          if (t.source !== 'webhook' && !t.isAutoRecorded) return false;
+        } else if (t.source !== sourceFilter) {
+          return false;
+        }
       }
 
       // Search term
@@ -295,14 +308,60 @@ export const TransactionList: React.FC<TransactionListProps> = ({
           </div>
         </div>
 
+        {/* 100% Automated BIDV Ingestion Banner */}
+        <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-teal-500/10 via-emerald-500/10 to-cyan-500/10 border border-teal-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center shrink-0 shadow-xs mt-0.5 sm:mt-0">
+              <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                  ⚡ Tự động ghi sổ 100% từ thông báo BIDV
+                </h3>
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  Đang hoạt động tự động
+                </span>
+              </div>
+              <p className="text-[11px] sm:text-xs text-slate-600 mt-0.5">
+                Mỗi khi điện thoại nhận biến động số dư BIDV SmartBanking, hệ thống tự động bóc tách số tiền và ghi vào thu/chi ngay lập tức. Bạn chỉ việc vào kiểm tra lại và chỉnh sửa danh mục khi cần!
+              </p>
+            </div>
+          </div>
+          {autoRecordedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (sourceFilter === 'webhook') {
+                  setSourceFilter('all');
+                } else {
+                  setSourceFilter('webhook');
+                  setTypeFilter('all');
+                }
+              }}
+              className={`shrink-0 text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                sourceFilter === 'webhook'
+                  ? 'bg-teal-700 text-white border-teal-700 shadow-xs'
+                  : 'bg-white text-teal-700 hover:bg-teal-50 border-teal-200'
+              }`}
+            >
+              ⚡ Lọc {autoRecordedCount} GD tự động
+            </button>
+          )}
+        </div>
+
         {/* Filter Controls: Search, Debit/Credit Type Tabs, Source */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-          {/* Type Tabs (Tất cả / Chi tiêu - / Cộng tiền +) */}
-          <div className="grid grid-cols-3 sm:flex items-center p-1 rounded-xl bg-slate-100 text-xs font-semibold shrink-0 w-full sm:w-auto">
+          {/* Type Tabs (Tất cả / Chi tiêu - / Cộng tiền + / Tự động) */}
+          <div className="grid grid-cols-2 sm:flex items-center p-1 rounded-xl bg-slate-100 text-xs font-semibold shrink-0 w-full sm:w-auto gap-1 sm:gap-0">
             <button
-              onClick={() => setTypeFilter('all')}
+              onClick={() => {
+                setTypeFilter('all');
+                setSourceFilter('all');
+              }}
               className={`px-2 sm:px-3 py-1.5 sm:py-1 rounded-lg transition-all cursor-pointer text-center truncate ${
-                typeFilter === 'all'
+                typeFilter === 'all' && sourceFilter !== 'webhook'
                   ? 'bg-white text-slate-900 shadow-2xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
@@ -310,9 +369,12 @@ export const TransactionList: React.FC<TransactionListProps> = ({
               Tất cả ({monthStats.totalCount})
             </button>
             <button
-              onClick={() => setTypeFilter('debit')}
+              onClick={() => {
+                setTypeFilter('debit');
+                setSourceFilter('all');
+              }}
               className={`inline-flex items-center justify-center gap-1 px-2 sm:px-3 py-1.5 sm:py-1 rounded-lg transition-all cursor-pointer text-center truncate ${
-                typeFilter === 'debit'
+                typeFilter === 'debit' && sourceFilter !== 'webhook'
                   ? 'bg-red-500 text-white shadow-2xs'
                   : 'text-red-700 hover:bg-red-50'
               }`}
@@ -321,15 +383,36 @@ export const TransactionList: React.FC<TransactionListProps> = ({
               <span className="truncate">Chi (-{monthStats.debitCount})</span>
             </button>
             <button
-              onClick={() => setTypeFilter('credit')}
+              onClick={() => {
+                setTypeFilter('credit');
+                setSourceFilter('all');
+              }}
               className={`inline-flex items-center justify-center gap-1 px-2 sm:px-3 py-1.5 sm:py-1 rounded-lg transition-all cursor-pointer text-center truncate ${
-                typeFilter === 'credit'
+                typeFilter === 'credit' && sourceFilter !== 'webhook'
                   ? 'bg-emerald-600 text-white shadow-2xs'
                   : 'text-emerald-700 hover:bg-emerald-50'
               }`}
             >
               <TrendingUp className="w-3 h-3 shrink-0" />
               <span className="truncate">Thu (+{monthStats.creditCount})</span>
+            </button>
+            <button
+              onClick={() => {
+                if (sourceFilter === 'webhook') {
+                  setSourceFilter('all');
+                } else {
+                  setSourceFilter('webhook');
+                  setTypeFilter('all');
+                }
+              }}
+              className={`inline-flex items-center justify-center gap-1 px-2 sm:px-3 py-1.5 sm:py-1 rounded-lg transition-all cursor-pointer text-center truncate ${
+                sourceFilter === 'webhook'
+                  ? 'bg-teal-600 text-white shadow-2xs'
+                  : 'text-teal-700 hover:bg-teal-50'
+              }`}
+            >
+              <Zap className="w-3 h-3 shrink-0 text-amber-400" />
+              <span className="truncate">⚡ Tự động ({autoRecordedCount})</span>
             </button>
           </div>
 
@@ -436,19 +519,39 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                           </span>
                         )}
 
-                        {/* Source badge */}
-                        {tx.source === 'webhook' && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded border border-teal-200 shrink-0">
-                            <Smartphone className="w-2.5 h-2.5" />
-                            Webhook
-                          </span>
-                        )}
-                        {tx.source === 'sms_paste' && (
+                        {/* Source & Automation badge */}
+                        {(tx.source === 'webhook' || tx.isAutoRecorded) ? (
+                          <>
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-bold bg-teal-50 text-teal-800 px-1.5 py-0.5 rounded border border-teal-200 shrink-0">
+                              <Zap className="w-2.5 h-2.5 text-amber-500 fill-amber-400" />
+                              Tự động BIDV
+                            </span>
+                            {tx.reviewed ? (
+                              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0">
+                                <Check className="w-2.5 h-2.5 text-emerald-600" />
+                                Đã kiểm tra
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onSaveTransaction?.({ ...tx, reviewed: true });
+                                }}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded border border-amber-200 shrink-0 transition-colors cursor-pointer"
+                                title="Bấm để xác nhận đã kiểm tra giao dịch này"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                Chưa kiểm tra
+                              </button>
+                            )}
+                          </>
+                        ) : tx.source === 'sms_paste' ? (
                           <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 shrink-0">
                             <Zap className="w-2.5 h-2.5" />
                             BIDV SMS
                           </span>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -496,9 +599,9 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 </div>
 
                 {/* Bottom Row: Category Selector & Full Touch Action Buttons */}
-                <div className="pl-12.5 flex items-center justify-between gap-2 pt-1 border-t border-slate-100/80">
+                <div className="sm:pl-12.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
                   {/* Category Dropdown Selector */}
-                  <div className="relative min-w-0 max-w-[170px] sm:max-w-xs">
+                  <div className="relative flex-1 min-w-[130px] max-w-full sm:max-w-xs">
                     <select
                       value={tx.categoryId}
                       onChange={(e) => onUpdateCategory(tx.id, e.target.value as CategoryId)}
@@ -513,12 +616,21 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                     </select>
                   </div>
 
-                  {/* Quick Action Buttons (Eye & Trash) - clearly visible and comfortable touch targets */}
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Quick Action Buttons (Edit, Eye & Trash) */}
+                  <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                    <button
+                      type="button"
+                      onClick={() => setEditingTx(tx)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 active:bg-teal-200 border border-teal-200 rounded-lg transition-all cursor-pointer shadow-2xs"
+                      title="Kiểm tra và sửa đổi chi tiết giao dịch"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                      <span>Sửa</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => setInspectTx(tx)}
-                      className="inline-flex items-center justify-center p-2 text-slate-500 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-lg transition-colors cursor-pointer"
+                      className="inline-flex items-center justify-center p-2 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-lg transition-colors cursor-pointer"
                       title="Xem tin nhắn BIDV gốc"
                       aria-label="Xem tin nhắn gốc"
                     >
@@ -526,12 +638,16 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setTxToDelete(tx)}
-                      className="inline-flex items-center justify-center p-2 text-red-600 bg-red-50 hover:bg-red-100 active:bg-red-200 border border-red-200/80 rounded-lg transition-all cursor-pointer"
-                      title="Xóa giao dịch này"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTxToDelete(tx);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 active:bg-red-200 border border-red-200 rounded-lg transition-all cursor-pointer shadow-2xs"
+                      title="Xóa giao dịch này khỏi sổ chi tiêu"
                       aria-label="Xóa giao dịch"
                     >
-                      <Trash2 className="w-4 h-4 text-red-600" />
+                      <Trash2 className="w-4 h-4 text-red-600 shrink-0" />
+                      <span>Xóa</span>
                     </button>
                   </div>
                 </div>
@@ -738,6 +854,20 @@ export const TransactionList: React.FC<TransactionListProps> = ({
           </div>
         </div>
       )}
+      {/* Edit Transaction Modal */}
+      <EditTransactionModal
+        isOpen={Boolean(editingTx)}
+        onClose={() => setEditingTx(null)}
+        transaction={editingTx}
+        onSave={(updated) => {
+          onSaveTransaction?.(updated);
+          setEditingTx(null);
+        }}
+        onDelete={(id) => {
+          onDeleteTransaction(id);
+          setEditingTx(null);
+        }}
+      />
     </div>
   );
 };
