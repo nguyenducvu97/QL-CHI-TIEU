@@ -22,6 +22,8 @@ import { WebhookIntegrationModal } from './components/WebhookIntegrationModal';
 import { CategoryRulesModal } from './components/CategoryRulesModal';
 import { BudgetSettingsModal } from './components/BudgetSettingsModal';
 import { ManualAddModal } from './components/ManualAddModal';
+import { BalanceUpdateModal } from './components/BalanceUpdateModal';
+import { MonthlyReportModal } from './components/MonthlyReportModal';
 import { ExpenseOverview } from './components/ExpenseOverview';
 import { ExpenseCharts } from './components/ExpenseCharts';
 import { TransactionList } from './components/TransactionList';
@@ -29,6 +31,7 @@ import { TransactionList } from './components/TransactionList';
 const STORAGE_KEY_TXS = 'bidv_expense_tracker_txs_v1';
 const STORAGE_KEY_BUDGETS = 'bidv_expense_tracker_budgets_v1';
 const STORAGE_KEY_RULES = 'bidv_expense_tracker_rules_v1';
+const STORAGE_KEY_MANUAL_BALANCE = 'bidv_expense_tracker_manual_balance_v1';
 
 export default function App() {
   // Load state from localStorage or use initial defaults
@@ -79,6 +82,19 @@ export default function App() {
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [isBudgetOpen, setIsBudgetOpen] = useState(false);
   const [isManualAddOpen, setIsManualAddOpen] = useState(false);
+  const [isBalanceModalOpen, setIsBalanceModalOpen] = useState(false);
+  const [isMonthlyReportOpen, setIsMonthlyReportOpen] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState<string>('all');
+
+  // Manual balance override
+  const [manualBalance, setManualBalance] = useState<number | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_MANUAL_BALANCE);
+      return saved !== null ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
   // Notification toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -113,11 +129,22 @@ export default function App() {
     }
   }, [rules]);
 
-  // Derive latest BIDV balance from most recent transaction
+  useEffect(() => {
+    try {
+      if (manualBalance !== null) {
+        localStorage.setItem(STORAGE_KEY_MANUAL_BALANCE, JSON.stringify(manualBalance));
+      }
+    } catch (e) {
+      console.error('Error saving manual balance:', e);
+    }
+  }, [manualBalance]);
+
+  // Derive latest BIDV balance from manual override or most recent transaction
   const latestBalance = React.useMemo(() => {
+    if (manualBalance !== null) return manualBalance;
     const txWithBalance = transactions.find((t) => t.balance !== undefined);
     return txWithBalance?.balance;
-  }, [transactions]);
+  }, [transactions, manualBalance]);
 
   // Current month total spent
   const totalSpentMonth = React.useMemo(() => {
@@ -135,9 +162,42 @@ export default function App() {
 
   // Add new transaction handler
   const handleAddTransaction = useCallback((newTx: Transaction) => {
+    if (newTx.balance !== undefined) {
+      setManualBalance(newTx.balance);
+    }
     setTransactions((prev) => [newTx, ...prev]);
-    showToast(`Đã tự động thêm: -${formatVND(newTx.amount)} (${newTx.description})`);
+    const sign = newTx.type === 'credit' ? '+' : '-';
+    showToast(`Đã tự động thêm: ${sign}${formatVND(newTx.amount)} (${newTx.description})`);
   }, [showToast]);
+
+  // Save balance handler
+  const handleSaveBalance = useCallback(
+    (newBalance: number, reason: string, createTx: boolean) => {
+      const current = latestBalance || 0;
+      const diff = newBalance - current;
+      setManualBalance(newBalance);
+
+      if (createTx && diff !== 0) {
+        const adjustTx: Transaction = {
+          id: 'tx-bal-' + Date.now(),
+          accountNumber: '1234567890',
+          amount: Math.abs(diff),
+          type: diff > 0 ? 'credit' : 'debit',
+          balance: newBalance,
+          timestamp: new Date().toISOString(),
+          rawMessage: `[Điều chỉnh số dư] ${reason} - Số dư mới: ${newBalance.toLocaleString('vi-VN')} VND`,
+          description: reason || 'Điều chỉnh số dư BIDV',
+          categoryId: 'investment',
+          categoryReason: 'Bút toán điều chỉnh / cập nhật số dư',
+          confidence: 1.0,
+          source: 'manual',
+        };
+        setTransactions((prev) => [adjustTx, ...prev]);
+      }
+      showToast(`Đã cập nhật số dư BIDV: ${formatVND(newBalance)}`);
+    },
+    [latestBalance, showToast]
+  );
 
   // Update category handler
   const handleUpdateCategory = useCallback((txId: string, newCatId: CategoryId) => {
@@ -234,19 +294,21 @@ export default function App() {
             const exists = transactions.some((t) => t.id === 'tx-' + newest.id);
             if (!exists) {
               const parsed = parseBidvNotificationLocally(newest.text, rules);
-              if (parsed.isBidvDebit && parsed.amount > 0) {
+              if (parsed.amount > 0) {
                 const newTx: Transaction = {
                   id: 'tx-' + newest.id,
                   accountNumber: parsed.accountNumber,
                   amount: parsed.amount,
-                  type: 'debit',
+                  type: parsed.isBidvDebit ? 'debit' : 'credit',
                   balance: parsed.balance,
                   timestamp: parsed.timestamp,
                   rawMessage: newest.text,
                   description: parsed.description,
                   merchant: parsed.merchant,
                   categoryId: parsed.suggestedCategoryId,
-                  categoryReason: 'Tự động bắt qua Webhook: ' + parsed.reasoning,
+                  categoryReason: parsed.isBidvDebit
+                    ? 'Tự động bắt qua Webhook: ' + parsed.reasoning
+                    : 'Tự động bắt qua Webhook: Giao dịch cộng tiền vào BIDV',
                   confidence: parsed.confidence,
                   source: 'webhook',
                   refNumber: parsed.refNumber,
@@ -277,6 +339,8 @@ export default function App() {
         onOpenManualAdd={() => setIsManualAddOpen(true)}
         onExportData={handleExportData}
         autoProcessCount={transactions.filter((t) => t.source === 'sms_paste' || t.source === 'webhook').length}
+        onOpenBalanceModal={() => setIsBalanceModalOpen(true)}
+        onOpenMonthlyReport={() => setIsMonthlyReportOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -344,6 +408,8 @@ export default function App() {
           budgets={budgets}
           latestBalance={latestBalance}
           onOpenBudgetModal={() => setIsBudgetOpen(true)}
+          onOpenBalanceModal={() => setIsBalanceModalOpen(true)}
+          onOpenMonthlyReportModal={() => setIsMonthlyReportOpen(true)}
         />
 
         {/* Charts & Analytics */}
@@ -354,6 +420,9 @@ export default function App() {
           transactions={transactions}
           onUpdateCategory={handleUpdateCategory}
           onDeleteTransaction={handleDeleteTransaction}
+          selectedMonth={selectedMonth}
+          onSelectMonth={setSelectedMonth}
+          onOpenMonthlyReportModal={() => setIsMonthlyReportOpen(true)}
           onOpenSimulator={() => {
             setSimulatorInitialText(undefined);
             setIsSimulatorOpen(true);
@@ -421,6 +490,26 @@ export default function App() {
         isOpen={isManualAddOpen}
         onClose={() => setIsManualAddOpen(false)}
         onAddTransaction={handleAddTransaction}
+      />
+
+      <BalanceUpdateModal
+        isOpen={isBalanceModalOpen}
+        onClose={() => setIsBalanceModalOpen(false)}
+        currentBalance={latestBalance}
+        onSaveBalance={handleSaveBalance}
+        onOpenSimulator={() => {
+          setSimulatorInitialText(undefined);
+          setIsSimulatorOpen(true);
+        }}
+      />
+
+      <MonthlyReportModal
+        isOpen={isMonthlyReportOpen}
+        onClose={() => setIsMonthlyReportOpen(false)}
+        transactions={transactions}
+        onSelectMonth={(monthKey) => {
+          setSelectedMonth(monthKey);
+        }}
       />
 
       {/* Toast popup */}

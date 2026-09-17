@@ -81,32 +81,39 @@ export function parseBidvNotificationLocally(
     accountNumber = accMatch[1];
   }
 
-  // 2. Extract Amount and Debit check
-  // E.g. "-55,000VND", "- 55.000 VND", "-250,000", "bi tru 150,000", "+100,000"
+  // 2. Extract Amount and Debit / Credit check
+  // E.g. "-55,000VND", "+10,000,000VND", "nhan tien 500,000", "thanh toan 120,000"
   let amount = 0;
-  let isDebit = false;
+  let isDebit = true;
 
-  // Check explicit minus sign or debit keywords
+  const creditMatch = text.match(
+    /(?:\+|cộng|cong|nhan tien|chuyen vao|nap tien|hoan tien|nhan duoc|ting ting)\s*([0-9]{1,3}(?:[.,]\d{3})+|[0-9]+)\s*(?:VND|đ|d)?/i
+  );
   const debitMatch = text.match(
-    /(?:-|trừ|bi tru|thanh toan|chuyen tien|rut tien)\s*([0-9]{1,3}(?:[.,]\d{3})+|[0-9]+)\s*(?:VND|đ|d)?/i
+    /(?:-|trừ|bi tru|thanh toan|chuyen tien|rut tien|phi)\s*([0-9]{1,3}(?:[.,]\d{3})+|[0-9]+)\s*(?:VND|đ|d)?/i
   );
   const generalAmountMatch = text.match(
     /([+-]?)\s*([0-9]{1,3}(?:[.,]\d{3})+|[0-9]{4,})\s*(?:VND|đ|d)/i
   );
 
-  if (debitMatch) {
+  if (creditMatch && (!debitMatch || text.includes('+') || normalized.includes('cong') || normalized.includes('nhan'))) {
+    amount = cleanNumber(creditMatch[1]);
+    isDebit = false;
+  } else if (debitMatch) {
     amount = cleanNumber(debitMatch[1]);
     isDebit = true;
   } else if (generalAmountMatch) {
     const sign = generalAmountMatch[1];
     amount = cleanNumber(generalAmountMatch[2]);
-    isDebit = sign === '-' || !text.includes('+');
-  }
-
-  // Fallback: if text contains '-' followed by digits
-  if (amount === 0) {
+    isDebit = sign !== '+';
+  } else {
+    // Fallback: raw '+' or '-'
+    const rawPlusMatch = text.match(/\+([0-9.,]+)/);
     const rawMinusMatch = text.match(/-([0-9.,]+)/);
-    if (rawMinusMatch) {
+    if (rawPlusMatch) {
+      amount = cleanNumber(rawPlusMatch[1]);
+      isDebit = false;
+    } else if (rawMinusMatch) {
       amount = cleanNumber(rawMinusMatch[1]);
       isDebit = true;
     }
@@ -226,6 +233,16 @@ export function parseBidvNotificationLocally(
         }
       }
       if (suggestedCategoryId !== 'other') break;
+    }
+  }
+
+  // If credit (cộng tiền), set appropriate classification
+  if (!isDebit) {
+    if (suggestedCategoryId === 'other') {
+      suggestedCategoryId = 'investment';
+    }
+    if (reasoning === 'Phân loại mặc định') {
+      reasoning = 'Giao dịch cộng tiền / nhận tiền vào tài khoản BIDV';
     }
   }
 

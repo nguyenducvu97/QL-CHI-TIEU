@@ -94,7 +94,7 @@ export const NotificationSimulator: React.FC<NotificationSimulatorProps> = ({
         setSelectedCategory(result.suggestedCategoryId);
         setEngineUsed('gemini');
 
-        if (autoSave && result.success && result.isBidvDebit) {
+        if (autoSave && result.success && result.amount > 0) {
           saveTransaction(result, result.suggestedCategoryId);
         }
         setIsAnalyzing(false);
@@ -110,7 +110,7 @@ export const NotificationSimulator: React.FC<NotificationSimulatorProps> = ({
     setSelectedCategory(localResult.suggestedCategoryId);
     setEngineUsed('local');
 
-    if (autoSave && localResult.success && localResult.isBidvDebit) {
+    if (autoSave && localResult.success && localResult.amount > 0) {
       saveTransaction(localResult, localResult.suggestedCategoryId);
     }
     setIsAnalyzing(false);
@@ -261,22 +261,31 @@ export const NotificationSimulator: React.FC<NotificationSimulatorProps> = ({
           {parseResult && (
             <div
               className={`p-4 rounded-xl border transition-all ${
-                parseResult.isBidvDebit && parseResult.amount > 0
-                  ? 'bg-emerald-50/50 border-emerald-200'
+                parseResult.amount > 0
+                  ? parseResult.isBidvDebit
+                    ? 'bg-emerald-50/50 border-emerald-200'
+                    : 'bg-teal-50/60 border-teal-200'
                   : 'bg-amber-50/50 border-amber-200'
               }`}
             >
               <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200/70">
                 <div className="flex items-center gap-2">
-                  {parseResult.isBidvDebit && parseResult.amount > 0 ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      Phát sinh trừ tiền chi tiêu hợp lệ
-                    </span>
+                  {parseResult.amount > 0 ? (
+                    parseResult.isBidvDebit ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        Phát sinh trừ tiền (Chi tiêu)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-teal-100 text-teal-800">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
+                        Phát sinh cộng tiền (Thu nhập / Nhận tiền)
+                      </span>
+                    )
                   ) : (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
                       <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                      Không phải trừ tiền chi tiêu (Hoặc cộng tiền)
+                      Không tìm thấy số tiền hợp lệ
                     </span>
                   )}
                   {engineUsed === 'gemini' && (
@@ -288,9 +297,16 @@ export const NotificationSimulator: React.FC<NotificationSimulatorProps> = ({
                 </div>
 
                 <div className="text-right">
-                  <span className="text-xs text-slate-500 block">Số tiền trừ:</span>
-                  <span className="text-lg font-bold text-red-600 font-mono">
-                    -{formatVND(parseResult.amount)}
+                  <span className="text-xs text-slate-500 block">
+                    {parseResult.isBidvDebit ? 'Số tiền trừ:' : 'Số tiền cộng:'}
+                  </span>
+                  <span
+                    className={`text-lg font-bold font-mono ${
+                      parseResult.isBidvDebit ? 'text-red-600' : 'text-emerald-600'
+                    }`}
+                  >
+                    {parseResult.isBidvDebit ? '-' : '+'}
+                    {formatVND(parseResult.amount)}
                   </span>
                 </div>
               </div>
@@ -393,7 +409,7 @@ export const NotificationSimulator: React.FC<NotificationSimulatorProps> = ({
                     className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors shadow-xs cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
-                    Xác Nhận Thêm Vào Chi Tiêu
+                    Xác Nhận Thêm Vào Sổ Giao Dịch
                   </button>
                 )}
               </div>

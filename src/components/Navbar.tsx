@@ -7,6 +7,8 @@ import {
   PlusCircle,
   Smartphone,
   Sparkles,
+  Edit3,
+  Calendar,
 } from 'lucide-react';
 import { formatVND } from '../utils/bidvParser';
 
@@ -20,6 +22,8 @@ interface NavbarProps {
   onOpenManualAdd: () => void;
   onExportData: () => void;
   autoProcessCount: number;
+  onOpenBalanceModal: () => void;
+  onOpenMonthlyReport?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -32,6 +36,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenManualAdd,
   onExportData,
   autoProcessCount,
+  onOpenBalanceModal,
+  onOpenMonthlyReport,
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-xs">
@@ -58,16 +64,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          {/* Balance Preview Badge */}
-          {latestBalance !== undefined && (
-            <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-sm">
-              <Wallet className="w-4 h-4 text-emerald-600" />
-              <span className="text-xs text-slate-500">Số dư BIDV:</span>
-              <span className="font-bold text-slate-800 font-mono">
-                {formatVND(latestBalance)}
-              </span>
-            </div>
-          )}
+          {/* Interactive Balance Badge */}
+          <button
+            onClick={onOpenBalanceModal}
+            className="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-50/70 hover:bg-emerald-100/80 border border-emerald-200 text-sm transition-all cursor-pointer group"
+            title="Bấm để cập nhật hoặc điều chỉnh số dư BIDV"
+          >
+            <Wallet className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
+            <span className="text-xs text-emerald-900 font-medium">Số dư BIDV:</span>
+            <span className="font-bold text-emerald-950 font-mono">
+              {latestBalance !== undefined ? formatVND(latestBalance) : '--- ₫'}
+            </span>
+            <Edit3 className="w-3 h-3 text-emerald-600 opacity-60 group-hover:opacity-100 ml-0.5" />
+          </button>
 
           {/* Quick Action Navigation */}
           <div className="flex items-center gap-2">
@@ -97,6 +106,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               )}
             </button>
+
+            {onOpenMonthlyReport && (
+              <button
+                id="btn-open-monthly-report"
+                onClick={onOpenMonthlyReport}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200/80 rounded-lg transition-colors cursor-pointer"
+                title="Xem lịch sử chi tiêu theo tháng và tổng chi tiêu tháng"
+              >
+                <Calendar className="w-4 h-4 text-emerald-600" />
+                <span className="hidden lg:inline">Báo Cáo Tháng</span>
+              </button>
+            )}
 
             <button
               id="btn-open-rules"

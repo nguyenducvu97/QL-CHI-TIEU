@@ -17,6 +17,8 @@ interface ExpenseOverviewProps {
   budgets: CategoryBudget[];
   latestBalance?: number;
   onOpenBudgetModal: () => void;
+  onOpenBalanceModal: () => void;
+  onOpenMonthlyReportModal?: () => void;
 }
 
 export const ExpenseOverview: React.FC<ExpenseOverviewProps> = ({
@@ -24,23 +26,32 @@ export const ExpenseOverview: React.FC<ExpenseOverviewProps> = ({
   budgets,
   latestBalance,
   onOpenBudgetModal,
+  onOpenBalanceModal,
+  onOpenMonthlyReportModal,
 }) => {
-  // Only calculate expenses for current month
+  // Only calculate expenses and income for current month
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
 
-  const currentMonthTxs = transactions.filter((t) => {
+  const currentMonthDebitTxs = transactions.filter((t) => {
     if (t.type !== 'debit') return false;
     const d = new Date(t.timestamp);
     return !isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
   });
 
-  const totalSpent = currentMonthTxs.reduce((sum, t) => sum + t.amount, 0);
+  const currentMonthCreditTxs = transactions.filter((t) => {
+    if (t.type !== 'credit') return false;
+    const d = new Date(t.timestamp);
+    return !isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+
+  const totalSpent = currentMonthDebitTxs.reduce((sum, t) => sum + t.amount, 0);
+  const totalIncome = currentMonthCreditTxs.reduce((sum, t) => sum + t.amount, 0);
 
   // Group by category
   const categorySpentMap = new Map<CategoryId, number>();
-  for (const t of currentMonthTxs) {
+  for (const t of currentMonthDebitTxs) {
     categorySpentMap.set(t.categoryId, (categorySpentMap.get(t.categoryId) || 0) + t.amount);
   }
 
@@ -76,40 +87,73 @@ export const ExpenseOverview: React.FC<ExpenseOverviewProps> = ({
         <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Tổng chi tiêu T9/2026
+              Chi tiêu T{currentMonth + 1}/{currentYear}
             </span>
-            <div className="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
-              <TrendingDown className="w-4 h-4" />
-            </div>
+            {onOpenMonthlyReportModal ? (
+              <button
+                onClick={onOpenMonthlyReportModal}
+                className="w-8 h-8 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 flex items-center justify-center transition-colors cursor-pointer"
+                title="Xem lịch sử chi tiêu theo tháng"
+              >
+                <TrendingDown className="w-4 h-4" />
+              </button>
+            ) : (
+              <div className="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+                <TrendingDown className="w-4 h-4" />
+              </div>
+            )}
           </div>
-          <div className="mt-2">
+          <div className="mt-2 flex items-baseline justify-between">
             <span className="text-2xl font-bold text-slate-900 font-mono tracking-tight">
               {formatVND(totalSpent)}
             </span>
+            {onOpenMonthlyReportModal && (
+              <button
+                onClick={onOpenMonthlyReportModal}
+                className="text-[11px] font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+              >
+                Xem các tháng
+              </button>
+            )}
           </div>
-          <div className="mt-1 flex items-center text-xs text-slate-500">
-            <span>{currentMonthTxs.length} giao dịch trừ tiền</span>
+          <div className="mt-1 flex items-center justify-between text-xs text-slate-500">
+            <span>{currentMonthDebitTxs.length} giao dịch trừ</span>
+            {totalIncome > 0 && (
+              <span className="text-emerald-600 font-medium font-mono">
+                Thu: +{formatVND(totalIncome)}
+              </span>
+            )}
           </div>
         </div>
 
         {/* BIDV Available Balance */}
-        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs">
+        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs group relative">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Số dư tài khoản BIDV
             </span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <button
+              onClick={onOpenBalanceModal}
+              className="w-8 h-8 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-600 flex items-center justify-center transition-colors cursor-pointer"
+              title="Nhấn để cập nhật / điều chỉnh số dư"
+            >
               <Wallet className="w-4 h-4" />
-            </div>
+            </button>
           </div>
-          <div className="mt-2">
+          <div className="mt-2 flex items-baseline justify-between">
             <span className="text-2xl font-bold text-emerald-800 font-mono tracking-tight">
               {latestBalance !== undefined ? formatVND(latestBalance) : '--- ₫'}
             </span>
+            <button
+              onClick={onOpenBalanceModal}
+              className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100/80 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+            >
+              Cập nhật
+            </button>
           </div>
           <div className="mt-1 flex items-center text-xs text-emerald-600 font-medium">
-            <CheckCircle className="w-3.5 h-3.5 mr-1" />
-            Cập nhật từ SMS mới nhất
+            <CheckCircle className="w-3.5 h-3.5 mr-1 shrink-0" />
+            <span>Tự động theo SMS / Điều chỉnh thủ công</span>
           </div>
         </div>
 
